@@ -52,12 +52,21 @@ class AiSettingsViewModel @Inject constructor(
         }
     }
 
-    fun testConnection() {
+    fun testConnection(apiKeyInput: String) {
         if (_isTesting.value) return
         viewModelScope.launch {
+            val key = apiKeyInput.trim()
+            if (key.isBlank()) {
+                _testResult.value = ConnectionTestResult(false, "Enter a Gemini API key first.")
+                return@launch
+            }
             _isTesting.value = true
             _testResult.value = null
-            _testResult.value = jarvisAi.testConnection()
+            // Save exactly what is tested. Previously the screen tested the
+            // previously saved key, so a newly typed key was silently ignored.
+            preferencesManager.setGeminiApiKey(key)
+            _feedback.value = "API key saved securely on this device"
+            _testResult.value = jarvisAi.testConnection(key)
             _isTesting.value = false
         }
     }

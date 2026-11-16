@@ -136,7 +136,7 @@ fun AiSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Stored in this app's private DataStore, never printed to logs and never sent anywhere except Google's API.",
+                        text = "Stored in this app's private DataStore, never printed to logs and never sent anywhere except Google's API. Both new AQ... Auth keys and older AIza... keys are accepted; this app does not check the prefix.",
                         color = Color.Gray,
                         fontSize = 11.sp
                     )
@@ -193,7 +193,7 @@ fun AiSettingsScreen(
                         }
 
                         OutlinedButton(
-                            onClick = { viewModel.testConnection() },
+                            onClick = { viewModel.testConnection(apiKeyInput) },
                             enabled = !isTesting,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisCyan),

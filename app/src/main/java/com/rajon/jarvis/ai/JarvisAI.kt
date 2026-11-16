@@ -92,8 +92,7 @@ class JarvisAI @Inject constructor(
         return JarvisAiResult(cleanedText, actionSummary)
     }
 
-    suspend fun testConnection(): ConnectionTestResult {
-        val apiKey = preferencesManager.geminiApiKey.first()
+    suspend fun testConnection(apiKey: String): ConnectionTestResult {
         return geminiClient.testConnection(apiKey)
     }
 
