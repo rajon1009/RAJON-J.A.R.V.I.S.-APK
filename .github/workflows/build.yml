@@ -35,7 +35,24 @@ jobs:
         run: ./gradlew testDebugUnitTest --continue
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
+
+      - name: Publish build log on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/logbranch"
+          cp build.log "$RUNNER_TEMP/logbranch/ci-build-error.log"
+          cd "$RUNNER_TEMP/logbranch"
+          git init -q
+          git checkout -q -b ci-logs
+          git add ci-build-error.log
+          git -c user.name="jarvis-ci" -c user.email="jarvis-ci@users.noreply.github.com" \
+            commit -q -m "ci: build error log for ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-logs:ci-logs
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
