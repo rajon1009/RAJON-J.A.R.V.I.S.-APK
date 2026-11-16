@@ -1,8 +1,8 @@
 package com.rajon.jarvis.ai
 
 import android.provider.Settings
-import com.google.ai.client.generativeai.GenerativeModel
 import com.rajon.jarvis.data.local.PreferencesManager
+import com.rajon.jarvis.data.model.MessageRole
 import com.rajon.jarvis.device.DeviceController
 import com.rajon.jarvis.device.ReminderManager
 import com.rajon.jarvis.repository.MemoryRepository
@@ -12,7 +12,8 @@ import javax.inject.Singleton
 
 data class JarvisAiResult(
     val replyText: String,
-    val executedActionDescription: String? = null
+    val executedActionDescription: String? = null,
+    val isError: Boolean = false
 )
 
 @Singleton
@@ -21,7 +22,8 @@ class JarvisAI @Inject constructor(
     private val deviceController: DeviceController,
     private val reminderManager: ReminderManager,
     private val memoryRepository: MemoryRepository,
-    private val conversationManager: ConversationManager
+    private val conversationManager: ConversationManager,
+    private val geminiClient: GeminiClient
 ) {
     suspend fun processUserRequest(userText: String): JarvisAiResult {
         conversationManager.recordUserMessage(userText)
@@ -32,26 +34,42 @@ class JarvisAI @Inject constructor(
 
         if (apiKey.isBlank()) {
             val fallback = if (language == "bn") {
-                "$owner স্যার, দয়া করে সেটিংস-এ গিয়ে আপনার Gemini API Key সেট করুন।"
+                "$owner স্যার, দয়া করে AI Settings-এ গিয়ে আপনার Gemini API Key সেট করুন।"
             } else {
-                "Sir, please provide your Gemini API Key in the Settings page to activate my brain."
+                "Sir, please provide your Gemini API Key in AI Settings to activate my neural core."
             }
             conversationManager.recordAssistantMessage(fallback)
-            return JarvisAiResult(fallback)
+            return JarvisAiResult(fallback, isError = true)
         }
 
-        val generativeModel = GenerativeModel(
-            modelName = "gemini-1.5-flash",
-            apiKey = apiKey
+        // History already contains the message we just stored; drop the trailing duplicate.
+        val history = conversationManager.getRecentContext().let { messages ->
+            val last = messages.lastOrNull()
+            if (last != null && last.role == MessageRole.USER && last.content == userText) {
+                messages.dropLast(1)
+            } else {
+                messages
+            }
+        }
+
+        val outcome = geminiClient.generate(
+            apiKey = apiKey,
+            systemInstruction = buildSystemInstruction(owner, language),
+            history = history,
+            userText = userText
         )
 
-        val prompt = buildPrompt(userText, owner, language)
-
-        val rawResponse = try {
-            val response = generativeModel.generateContent(prompt)
-            response.text ?: "No response from brain."
-        } catch (e: Exception) {
-            "Sir, I encountered an issue accessing my neural core: ${e.localizedMessage}"
+        val rawResponse = when (outcome) {
+            is GeminiOutcome.Success -> outcome.text
+            is GeminiOutcome.Failure -> {
+                val message = if (language == "bn") {
+                    "স্যার, নিউরাল কোরের সাথে সংযোগ করা যায়নি। ${outcome.userMessage}"
+                } else {
+                    "Sir, I could not reach my neural core. ${outcome.userMessage}"
+                }
+                conversationManager.recordAssistantMessage(message)
+                return JarvisAiResult(message, isError = true)
+            }
         }
 
         val action = ActionParser.extractAction(rawResponse)
@@ -66,16 +84,22 @@ class JarvisAI @Inject constructor(
             }
         }
 
+        if (cleanedText.isBlank()) {
+            cleanedText = "No response from neural core."
+        }
+
         conversationManager.recordAssistantMessage(cleanedText)
         return JarvisAiResult(cleanedText, actionSummary)
     }
 
-    private suspend fun buildPrompt(userText: String, owner: String, language: String): String {
+    suspend fun testConnection(): ConnectionTestResult {
+        val apiKey = preferencesManager.geminiApiKey.first()
+        return geminiClient.testConnection(apiKey)
+    }
+
+    private suspend fun buildSystemInstruction(owner: String, language: String): String {
         val deviceInfo = deviceController.getFullDeviceInfo()
         val memories = memoryRepository.getAllOnce().joinToString("\n") { "- ${it.key}: ${it.value}" }
-        val recentChat = conversationManager.getRecentContext().joinToString("\n") {
-            "${it.role.name}: ${it.content}"
-        }
 
         return """
 You are J.A.R.V.I.S., the ultimate personal Artificial Intelligence assistant created exclusively for your owner and master, $owner Sir.
@@ -83,7 +107,8 @@ Personality & Rules:
 1. Always address the owner respectfully as "$owner Sir" or "Sir".
 2. You speak natural fluent ${if (language == "bn") "Bengali (Bangla)" else "English"}. You can also seamlessly switch between Bangla and English based on the language Sir speaks to you.
 3. You are confident, polite, proactive, highly intelligent, and loyal.
-4. If Sir asks you to do an Android device task, you MUST append an executable JSON action block at the end of your response in this exact format:
+4. Keep spoken answers concise (2-4 sentences) unless Sir asks for detail, because replies are read aloud.
+5. If Sir asks you to do an Android device task, you MUST append an executable JSON action block at the end of your response in this exact format:
 ```json
 {"action": "ACTION_NAME", "params": {"key": "value"}}
 ```
@@ -106,13 +131,7 @@ Current Device State:
 - Model: ${deviceInfo.deviceBrand} ${deviceInfo.deviceModel} (Android ${deviceInfo.androidVersion})
 
 Owner Memories:
-$memories
-
-Recent Conversation:
-$recentChat
-
-Current Instruction from Sir:
-$userText
+${memories.ifBlank { "- none yet" }}
 """.trimIndent()
     }
 
@@ -148,7 +167,7 @@ $userText
             is JarvisAction.OpenWhatsApp -> {
                 if (!action.phone.isNullOrBlank() && !action.message.isNullOrBlank()) {
                     deviceController.sendWhatsAppMessage(action.phone, action.message)
-                    "Drafting WhatsApp message for ${action.phone}."
+                    "Drafting WhatsApp message for ${action.phone}. Press send in WhatsApp to confirm."
                 } else {
                     deviceController.openWhatsApp()
                     "Opening WhatsApp."

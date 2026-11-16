@@ -26,6 +26,7 @@ data class DashboardUiState(
     val storageInfo: StorageInfo = StorageInfo(0f, 0f, 0f),
     val ramInfo: RamInfo = RamInfo(0, 0, 0),
     val networkInfo: NetworkInfo = NetworkInfo(false, false, false, "Offline"),
+    val isAiConfigured: Boolean = false,
     val isRefreshing: Boolean = false
 )
 
@@ -43,33 +44,26 @@ class DashboardViewModel @Inject constructor(
     private val _ramInfo = MutableStateFlow(deviceController.getRamInfo())
     private val _networkInfo = MutableStateFlow(deviceController.getNetworkInfo())
 
-    private data class CoreState(
-        val owner: String,
-        val language: String,
-        val deviceInfo: DeviceInfo,
-        val storageInfo: StorageInfo,
-        val ramInfo: RamInfo
-    )
-
     val uiState: StateFlow<DashboardUiState> = combine(
         combine(
             preferencesManager.ownerName,
             preferencesManager.language,
-            _deviceInfo,
-            _storageInfo,
-            _ramInfo
-        ) { owner, lang, devInfo, storage, ram ->
-            CoreState(owner, lang, devInfo, storage, ram)
+            preferencesManager.geminiApiKey
+        ) { owner, language, apiKey ->
+            Triple(owner, language, apiKey)
         },
-        combine(_networkInfo, _isRefreshing) { net, refreshing -> net to refreshing }
-    ) { core, (net, refreshing) ->
+        combine(_deviceInfo, _storageInfo) { device, storage -> device to storage },
+        combine(_ramInfo, _networkInfo) { ram, network -> ram to network },
+        _isRefreshing
+    ) { (owner, language, apiKey), (device, storage), (ram, network), refreshing ->
         DashboardUiState(
-            ownerName = core.owner,
-            greeting = computeGreeting(core.owner, core.language),
-            deviceInfo = core.deviceInfo,
-            storageInfo = core.storageInfo,
-            ramInfo = core.ramInfo,
-            networkInfo = net,
+            ownerName = owner,
+            greeting = computeGreeting(owner, language),
+            deviceInfo = device,
+            storageInfo = storage,
+            ramInfo = ram,
+            networkInfo = network,
+            isAiConfigured = apiKey.isNotBlank(),
             isRefreshing = refreshing
         )
     }.stateIn(

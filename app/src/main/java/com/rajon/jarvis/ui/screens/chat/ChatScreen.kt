@@ -1,5 +1,9 @@
 package com.rajon.jarvis.ui.screens.chat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +31,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,12 +40,16 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -54,6 +64,7 @@ import com.rajon.jarvis.ui.theme.JarvisDarkBackground
 import com.rajon.jarvis.ui.theme.JarvisDarkSurface
 import com.rajon.jarvis.ui.theme.JarvisDarkSurfaceVariant
 import com.rajon.jarvis.ui.theme.JarvisSuccess
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +76,42 @@ fun ChatScreen(
     val inputText by viewModel.inputText.collectAsStateWithLifecycle()
     val isThinking by viewModel.isThinking.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.toggleVoiceInput()
+        } else {
+            scope.launch {
+                snackbarHostState.showSnackbar("Microphone permission is required for voice commands.")
+            }
+        }
+    }
+
+    val onMicClick: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            viewModel.toggleVoiceInput()
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissError()
+        }
+    }
 
     val listState = rememberLazyListState()
 
@@ -125,6 +172,7 @@ fun ChatScreen(
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = JarvisDarkBackground
     ) { innerPadding ->
         Column(
@@ -247,7 +295,7 @@ fun ChatScreen(
 
                     VoiceButton(
                         isListening = isListening,
-                        onToggle = { viewModel.toggleVoiceInput() }
+                        onToggle = onMicClick
                     )
                 }
             }

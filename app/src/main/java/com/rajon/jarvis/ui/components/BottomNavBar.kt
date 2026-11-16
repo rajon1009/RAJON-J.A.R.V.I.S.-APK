@@ -1,10 +1,11 @@
 package com.rajon.jarvis.ui.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,10 +32,11 @@ fun BottomNavBar(
     modifier: Modifier = Modifier
 ) {
     val items = listOf(
-        NavItem(Screen.Dashboard, Icons.Default.Dashboard, "Dashboard"),
-        NavItem(Screen.Chat, Icons.Default.Chat, "J.A.R.V.I.S."),
+        NavItem(Screen.Dashboard, Icons.Default.Dashboard, "Home"),
+        NavItem(Screen.Chat, Icons.Default.Chat, "Chat"),
+        NavItem(Screen.Voice, Icons.Default.Mic, "Voice"),
         NavItem(Screen.DeviceControl, Icons.Default.PhoneAndroid, "Device"),
-        NavItem(Screen.Settings, Icons.Default.Settings, "Settings")
+        NavItem(Screen.More, Icons.Default.Apps, "More")
     )
 
     NavigationBar(
@@ -43,7 +45,12 @@ fun BottomNavBar(
         contentColor = Color.White
     ) {
         items.forEach { item ->
-            val isSelected = currentRoute == item.screen.route
+            val isSelected = when (item.screen) {
+                Screen.Voice -> currentRoute.startsWith(Screen.Voice.route)
+                Screen.More -> currentRoute in Screen.moreRoutes
+                else -> currentRoute == item.screen.route
+            }
+
             NavigationBarItem(
                 selected = isSelected,
                 onClick = {
