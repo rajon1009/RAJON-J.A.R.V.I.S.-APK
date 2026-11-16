@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
@@ -56,6 +57,10 @@ class GeminiClient @Inject constructor() {
     }
 
     private val client: OkHttpClient = OkHttpClient.Builder()
+        // HTTP/2 POSTs to generativelanguage.googleapis.com can be answered with an
+        // empty 404 by some mobile networks / middleboxes, while GETs and HTTP/1.1
+        // requests succeed. Force HTTP/1.1 so chat requests follow the reliable path.
+        .protocols(listOf(Protocol.HTTP_1_1))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -105,7 +110,7 @@ class GeminiClient @Inject constructor() {
                 }
             } else {
                 GeminiOutcome.Failure(
-                    userMessage = AiErrorMapper.fromHttp(code, serverMessage(body)),
+                    userMessage = httpErrorMessage(code, body),
                     httpCode = code,
                     technicalDetail = serverMessage(body)
                 )
@@ -126,26 +131,51 @@ class GeminiClient @Inject constructor() {
         }
 
         val startedAt = System.currentTimeMillis()
+        // A real generateContent call, not just model metadata: GET can succeed
+        // while POST is blocked by the network, so this is the honest check.
+        val payload = JsonObject().apply {
+            add("contents", JsonArray().apply {
+                add(JsonObject().apply {
+                    addProperty("role", "user")
+                    add("parts", JsonArray().apply {
+                        add(JsonObject().apply { addProperty("text", "Reply with exactly: OK") })
+                    })
+                })
+            })
+            add("generationConfig", JsonObject().apply {
+                addProperty("maxOutputTokens", 16)
+            })
+        }
         val request = Request.Builder()
-            .url("$BASE_URL/models/$MODEL_NAME")
+            .url("$BASE_URL/models/$MODEL_NAME:generateContent")
             .addHeader("x-goog-api-key", apiKey)
-            .get()
+            .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         return try {
-            val (code, body) = withContext(Dispatchers.IO) { execute(request) }
+            val (code, body) = executeWithRetry(request)
             val latency = System.currentTimeMillis() - startedAt
             if (code in 200..299) {
-                ConnectionTestResult(
-                    isSuccess = true,
-                    message = "Connected to $MODEL_NAME",
-                    latencyMs = latency,
-                    httpCode = code
-                )
+                val reply = extractText(body)
+                if (reply.isNullOrBlank()) {
+                    ConnectionTestResult(
+                        isSuccess = false,
+                        message = "Connected, but $MODEL_NAME returned no text (possibly a safety filter).",
+                        latencyMs = latency,
+                        httpCode = code
+                    )
+                } else {
+                    ConnectionTestResult(
+                        isSuccess = true,
+                        message = "Connected to $MODEL_NAME - live reply received.",
+                        latencyMs = latency,
+                        httpCode = code
+                    )
+                }
             } else {
                 ConnectionTestResult(
                     isSuccess = false,
-                    message = AiErrorMapper.fromHttp(code, serverMessage(body)),
+                    message = httpErrorMessage(code, body),
                     latencyMs = latency,
                     httpCode = code
                 )
@@ -162,13 +192,24 @@ class GeminiClient @Inject constructor() {
     }
 
     private suspend fun executeWithRetry(request: Request): Pair<Int, String> = withContext(Dispatchers.IO) {
-        try {
-            execute(request)
-        } catch (e: IOException) {
-            // One retry helps with pooled-connection resets and brief radio handovers.
-            delay(700)
-            execute(request)
+        var last: Pair<Int, String>? = null
+        for (attempt in 0..1) {
+            try {
+                val result = execute(request)
+                last = result
+                val (code, body) = result
+                // Retry transient edge/proxy failures: an empty 404 is not a real
+                // Gemini response, and 502/503/504 are usually momentary.
+                val transient = (code == 404 && body.isBlank()) || code == 502 || code == 503 || code == 504
+                if (!transient || attempt == 1) return@withContext result
+                delay(if (code == 503) 2500 else 1200)
+            } catch (e: IOException) {
+                // One retry helps with pooled-connection resets and brief radio handovers.
+                if (attempt == 1) throw e
+                delay(700)
+            }
         }
+        last ?: throw IOException("No response from Gemini")
     }
 
     private fun execute(request: Request): Pair<Int, String> {
@@ -260,5 +301,19 @@ class GeminiClient @Inject constructor() {
                 ?.takeIf { !it.isJsonNull }
                 ?.asString
         }.getOrNull()
+    }
+
+    /**
+     * An empty 404 is not a Gemini API response (the API always returns JSON).
+     * It usually means a VPN, Private DNS, ad-blocker or carrier proxy dropped
+     * the POST before it reached Google, so give a network-focused message.
+     */
+    private fun httpErrorMessage(code: Int, body: String): String {
+        return if (code == 404 && body.isBlank()) {
+            "Gemini was unreachable: the network returned an empty HTTP 404 instead of an API response. " +
+                "Turn off VPN / Private DNS / ad-blockers or switch between Wi-Fi and mobile data, then retry."
+        } else {
+            AiErrorMapper.fromHttp(code, serverMessage(body))
+        }
     }
 }

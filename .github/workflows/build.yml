@@ -30,6 +30,15 @@ jobs:
       - name: Grant Execute Permission to gradlew
         run: chmod +x ./gradlew
 
+      # Android refuses to update an app signed with a different certificate.
+      # GitHub-hosted runners start with no debug keystore, so without this cache
+      # every run produces a new signing identity and users must uninstall first.
+      - name: Restore persistent debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: jarvis-debug-keystore-v1
+
       - name: Run Action Parser Unit Tests
         continue-on-error: true
         run: ./gradlew testDebugUnitTest --continue
