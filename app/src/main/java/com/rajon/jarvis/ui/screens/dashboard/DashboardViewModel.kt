@@ -43,21 +43,32 @@ class DashboardViewModel @Inject constructor(
     private val _ramInfo = MutableStateFlow(deviceController.getRamInfo())
     private val _networkInfo = MutableStateFlow(deviceController.getNetworkInfo())
 
+    private data class CoreState(
+        val owner: String,
+        val language: String,
+        val deviceInfo: DeviceInfo,
+        val storageInfo: StorageInfo,
+        val ramInfo: RamInfo
+    )
+
     val uiState: StateFlow<DashboardUiState> = combine(
-        preferencesManager.ownerName,
-        preferencesManager.language,
-        _deviceInfo,
-        _storageInfo,
-        _ramInfo,
-        _networkInfo,
-        _isRefreshing
-    ) { owner, lang, devInfo, storage, ram, net, refreshing ->
+        combine(
+            preferencesManager.ownerName,
+            preferencesManager.language,
+            _deviceInfo,
+            _storageInfo,
+            _ramInfo
+        ) { owner, lang, devInfo, storage, ram ->
+            CoreState(owner, lang, devInfo, storage, ram)
+        },
+        combine(_networkInfo, _isRefreshing) { net, refreshing -> net to refreshing }
+    ) { core, (net, refreshing) ->
         DashboardUiState(
-            ownerName = owner,
-            greeting = computeGreeting(owner, lang),
-            deviceInfo = devInfo,
-            storageInfo = storage,
-            ramInfo = ram,
+            ownerName = core.owner,
+            greeting = computeGreeting(core.owner, core.language),
+            deviceInfo = core.deviceInfo,
+            storageInfo = core.storageInfo,
+            ramInfo = core.ramInfo,
             networkInfo = net,
             isRefreshing = refreshing
         )

@@ -52,21 +52,32 @@ class DeviceControlViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     private val _isRefreshing = MutableStateFlow(false)
 
+    private data class CoreState(
+        val deviceInfo: DeviceInfo,
+        val storageInfo: StorageInfo,
+        val ramInfo: RamInfo,
+        val networkInfo: NetworkInfo,
+        val installedApps: List<AppInfo>
+    )
+
     val uiState: StateFlow<DeviceControlUiState> = combine(
-        _deviceInfo,
-        _storageInfo,
-        _ramInfo,
-        _networkInfo,
-        _installedApps,
-        _searchQuery,
-        _isRefreshing
-    ) { dev, storage, ram, net, apps, query, refreshing ->
+        combine(
+            _deviceInfo,
+            _storageInfo,
+            _ramInfo,
+            _networkInfo,
+            _installedApps
+        ) { dev, storage, ram, net, apps ->
+            CoreState(dev, storage, ram, net, apps)
+        },
+        combine(_searchQuery, _isRefreshing) { query, refreshing -> query to refreshing }
+    ) { core, (query, refreshing) ->
         DeviceControlUiState(
-            deviceInfo = dev,
-            storageInfo = storage,
-            ramInfo = ram,
-            networkInfo = net,
-            installedApps = apps,
+            deviceInfo = core.deviceInfo,
+            storageInfo = core.storageInfo,
+            ramInfo = core.ramInfo,
+            networkInfo = core.networkInfo,
+            installedApps = core.installedApps,
             searchQuery = query,
             isRefreshing = refreshing
         )
