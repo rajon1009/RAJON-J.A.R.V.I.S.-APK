@@ -58,7 +58,7 @@ object ActionParser {
                 else -> JarvisAction.Unknown(jsonStr)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse action json: $jsonStr", e)
+            println("JARVIS_ActionParser: Failed to parse action json: $jsonStr - ${e.message}")
             null
         }
     }
