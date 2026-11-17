@@ -52,8 +52,7 @@ jobs:
           fi
           echo "Keystore ready: $HOME/.jarvis-keystore/debug.keystore"
 
-      - name: Run Action Parser Unit Tests
-        continue-on-error: true
+      - name: Run JVM Unit Tests
         run: ./gradlew testDebugUnitTest --continue
 
       - name: Build Debug APK
