@@ -60,10 +60,10 @@ class OpenAiCompatibleProvider(
         )
 
         val payload = JsonObject().apply {
-            add("model", config.model)
+            addProperty("model", config.model)
             add("messages", messages)
-            add("max_tokens", 1024)
-            add("stream", false)
+            addProperty("max_tokens", 1024)
+            addProperty("stream", false)
         }
 
         return try {
@@ -128,7 +128,7 @@ class OpenAiCompatibleProvider(
 
         return try {
             val payload = JsonObject().apply {
-                add("model", config.model.ifBlank { models.firstOrNull() ?: "" })
+                addProperty("model", config.model.ifBlank { models.firstOrNull() ?: "" })
                 add(
                     "messages",
                     JsonArray().apply {
@@ -140,7 +140,7 @@ class OpenAiCompatibleProvider(
                         )
                     }
                 )
-                add("max_tokens", 16)
+                addProperty("max_tokens", 16)
             }
             val response = transport.postJson(
                 url = "${config.baseUrl.trimEnd('/')}/chat/completions",

@@ -50,9 +50,9 @@ class AnthropicProvider(
         )
 
         val payload = JsonObject().apply {
-            add("model", config.model)
-            add("max_tokens", 1024)
-            add("system", systemInstruction)
+            addProperty("model", config.model)
+            addProperty("max_tokens", 1024)
+            addProperty("system", systemInstruction)
             add("messages", messages)
         }
 
@@ -111,8 +111,8 @@ class AnthropicProvider(
 
         return try {
             val payload = JsonObject().apply {
-                add("model", config.model.ifBlank { models.firstOrNull() ?: "" })
-                add("max_tokens", 16)
+                addProperty("model", config.model.ifBlank { models.firstOrNull() ?: "" })
+                addProperty("max_tokens", 16)
                 add(
                     "messages",
                     JsonArray().apply {

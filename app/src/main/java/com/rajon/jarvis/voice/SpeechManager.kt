@@ -66,10 +66,10 @@ class SpeechManager @Inject constructor(
                     name = voice.name,
                     locale = voice.locale.toLanguageTag(),
                     quality = when (voice.quality) {
-                        TextToSpeech.Quality.VERY_HIGH -> "very high"
-                        TextToSpeech.Quality.HIGH -> "high"
-                        TextToSpeech.Quality.NORMAL -> "normal"
-                        TextToSpeech.Quality.LOW -> "low"
+                        android.speech.tts.Voice.Quality.VERY_HIGH -> "very high"
+                        android.speech.tts.Voice.Quality.HIGH -> "high"
+                        android.speech.tts.Voice.Quality.NORMAL -> "normal"
+                        android.speech.tts.Voice.Quality.LOW -> "low"
                         else -> "unknown"
                     },
                     networkRequired = voice.isNetworkConnectionRequired,

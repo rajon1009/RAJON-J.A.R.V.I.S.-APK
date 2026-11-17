@@ -71,7 +71,7 @@ class JarvisAI @Inject constructor(
 
         val rawResponse: String
         var providerLabel: String? = null
-        var failoverTrail: List<String> = emptyList
+        var failoverTrail: List<String> = emptyList()
 
         when (outcome) {
             is FailoverOutcome.Success -> {

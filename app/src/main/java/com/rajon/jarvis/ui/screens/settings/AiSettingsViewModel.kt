@@ -109,6 +109,10 @@ class AiSettingsViewModel @Inject constructor(
         }
     }
 
+    fun dismissFeedback() {
+        _feedback.value = null
+    }
+
     /** Stores the credential and model of one provider. */
     fun saveProvider(id: String, model: String, apiKey: String) {
         viewModelScope.launch {
