@@ -15,8 +15,8 @@ android {
         applicationId = "com.rajon.jarvis"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.2.0"
+        versionCode = 7
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -126,6 +126,11 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:$retrofitVersion")
     implementation("com.squareup.okhttp3:okhttp:$okhttpVersion")
     implementation("com.squareup.okhttp3:logging-interceptor:$okhttpVersion")
+
+    // Agora Conversational Voice Agent (RTC voice + RTM + official client toolkit)
+    implementation("io.agora.rtc:voice-sdk:4.7.0")
+    implementation("io.agora:agora-rtm:2.2.3")
+    implementation("io.agora.agents:agora-agent-client-toolkit:2.9.0")
 
     // Google Generative AI (Gemini) SDK
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")

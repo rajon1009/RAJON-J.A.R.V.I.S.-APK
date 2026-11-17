@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.rajon.jarvis.ai.provider.ProviderConfig
 import com.rajon.jarvis.ai.provider.ProviderType
 import com.rajon.jarvis.ui.components.BottomNavBar
@@ -86,6 +88,7 @@ fun AiSettingsScreen(
     val providerConfigs by viewModel.providerConfigs.collectAsStateWithLifecycle()
     val providerStates by viewModel.providerStates.collectAsStateWithLifecycle()
     val failoverChain by viewModel.failoverChain.collectAsStateWithLifecycle()
+    val agoraJson by viewModel.agoraJson.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -325,6 +328,15 @@ fun AiSettingsScreen(
                     onTest = { model, key -> viewModel.testProvider(config.id, model, key) },
                     onDiscover = { key -> viewModel.discoverModels(config.id, key) },
                     onToggle = { enabled -> viewModel.setProviderEnabled(config.id, enabled) }
+                )
+            }
+
+            item { HudSectionTitle(text = "AGORA CONVERSATIONAL VOICE") }
+
+            item {
+                AgoraConfigPanel(
+                    savedJson = agoraJson,
+                    onSave = { json -> viewModel.saveAgoraConfig(json) }
                 )
             }
 
@@ -569,6 +581,182 @@ private fun ProviderCard(
                 color = Color.Gray,
                 fontSize = 10.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun AgoraConfigPanel(
+    savedJson: String,
+    onSave: (String) -> Unit
+) {
+    fun field(name: String, fallback: String): String = runCatching {
+        val obj = JsonParser.parseString(savedJson).asJsonObject
+        obj.get(name)?.takeIf { !it.isJsonNull }?.asString ?: fallback
+    }.getOrDefault(fallback)
+
+    var backendUrl by remember(savedJson) { mutableStateOf(field("backendUrl", "")) }
+    var appId by remember(savedJson) { mutableStateOf(field("appId", "")) }
+    var rtcToken by remember(savedJson) { mutableStateOf(field("rtcToken", "")) }
+    var channel by remember(savedJson) { mutableStateOf(field("channel", "jarvis-voice")) }
+    var customerId by remember(savedJson) { mutableStateOf(field("customerId", "")) }
+    var customerSecret by remember(savedJson) { mutableStateOf(field("customerSecret", "")) }
+    var restToken by remember(savedJson) { mutableStateOf(field("restToken", "")) }
+    var llmApiKey by remember(savedJson) { mutableStateOf(field("llmApiKey", "")) }
+    var ttsVoice by remember(savedJson) { mutableStateOf(field("ttsVoice", "bn-BD-NabanitaNeural")) }
+    var asrLanguage by remember(savedJson) { mutableStateOf(field("asrLanguage", "bn-BD")) }
+
+    GlassPanel(modifier = Modifier.fillMaxWidth(), borderColor = JarvisOrange.copy(alpha = 0.4f)) {
+        Text(
+            text = "Live voice agent",
+            color = JarvisOrange,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Recommended: a token-server URL that keeps your Agora App Certificate on the server. For testing you can use an App ID + temporary RTC token. Nothing is stored except in this app's private DataStore.",
+            color = Color.Gray,
+            fontSize = 10.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val fieldColors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = JarvisCyan,
+            unfocusedBorderColor = Color.DarkGray,
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White
+        )
+
+        OutlinedTextField(
+            value = backendUrl,
+            onValueChange = { backendUrl = it },
+            label = { Text("Token server URL (recommended)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = appId,
+            onValueChange = { appId = it },
+            label = { Text("Agora App ID") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = rtcToken,
+            onValueChange = { rtcToken = it },
+            label = { Text("Temporary RTC token") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = channel,
+            onValueChange = { channel = it },
+            label = { Text("Channel") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = customerId,
+            onValueChange = { customerId = it },
+            label = { Text("REST customer ID (optional)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = customerSecret,
+            onValueChange = { customerSecret = it },
+            label = { Text("REST customer secret (optional)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = restToken,
+            onValueChange = { restToken = it },
+            label = { Text("REST token (optional)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = llmApiKey,
+            onValueChange = { llmApiKey = it },
+            label = { Text("LLM API key (if not managed)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = asrLanguage,
+            onValueChange = { asrLanguage = it },
+            label = { Text("Speech language") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = ttsVoice,
+            onValueChange = { ttsVoice = it },
+            label = { Text("TTS voice") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = fieldColors,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = {
+                val obj = JsonObject().apply {
+                    addProperty("backendUrl", backendUrl.trim())
+                    addProperty("appId", appId.trim())
+                    addProperty("rtcToken", rtcToken.trim())
+                    addProperty("channel", channel.trim())
+                    addProperty("customerId", customerId.trim())
+                    addProperty("customerSecret", customerSecret.trim())
+                    addProperty("restToken", restToken.trim())
+                    addProperty("llmApiKey", llmApiKey.trim())
+                    addProperty("asrLanguage", asrLanguage.trim())
+                    addProperty("ttsVoice", ttsVoice.trim())
+                }
+                onSave(obj.toString())
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = JarvisCyan,
+                contentColor = Color.Black
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text("Save Agora settings")
         }
     }
 }

@@ -29,6 +29,7 @@ class PreferencesManager @Inject constructor(
         val KEY_TTS_ENABLED = booleanPreferencesKey("tts_enabled")
         val KEY_VOICE_INPUT_ENABLED = booleanPreferencesKey("voice_input_enabled")
         val KEY_TTS_VOICE = stringPreferencesKey("tts_voice")
+        val KEY_AGORA_CONFIG = stringPreferencesKey("agora_config")
     }
 
     val language: Flow<String> = dataStore.data.map { it[KEY_LANGUAGE] ?: "bn" }
@@ -38,6 +39,7 @@ class PreferencesManager @Inject constructor(
     val isTtsEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_TTS_ENABLED] ?: true }
     val isVoiceInputEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_VOICE_INPUT_ENABLED] ?: true }
     val ttsVoice: Flow<String> = dataStore.data.map { it[KEY_TTS_VOICE] ?: "" }
+    val agoraConfig: Flow<String> = dataStore.data.map { it[KEY_AGORA_CONFIG] ?: "" }
 
     suspend fun setLanguage(lang: String) {
         dataStore.edit { it[KEY_LANGUAGE] = lang }
@@ -65,6 +67,10 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setTtsVoice(name: String) {
         dataStore.edit { it[KEY_TTS_VOICE] = name }
+    }
+
+    suspend fun setAgoraConfig(json: String) {
+        dataStore.edit { it[KEY_AGORA_CONFIG] = json }
     }
 
     suspend fun getApiKeyOnce(): String {

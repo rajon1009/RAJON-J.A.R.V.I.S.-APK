@@ -41,6 +41,13 @@ class AiSettingsViewModel @Inject constructor(
             initialValue = ""
         )
 
+    val agoraJson: StateFlow<String> = preferencesManager.agoraConfig
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
     val modelName: String = GeminiClient.MODEL_NAME
     val apiVersion: String = GeminiClient.API_VERSION
 
@@ -106,6 +113,13 @@ class AiSettingsViewModel @Inject constructor(
             _feedback.value = "API key saved securely on this device"
             _testResult.value = jarvisAi.testConnection(key)
             _isTesting.value = false
+        }
+    }
+
+    fun saveAgoraConfig(json: String) {
+        viewModelScope.launch {
+            preferencesManager.setAgoraConfig(json)
+            _feedback.value = "Agora configuration saved on this device"
         }
     }
 

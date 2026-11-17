@@ -2,6 +2,7 @@ package com.rajon.jarvis.ui.screens.voice
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rajon.jarvis.agora.AgoraVoiceAgent
 import com.rajon.jarvis.ai.JarvisAI
 import com.rajon.jarvis.data.local.PreferencesManager
 import com.rajon.jarvis.voice.SpeechManager
@@ -17,8 +18,27 @@ import javax.inject.Inject
 class VoiceAssistantViewModel @Inject constructor(
     private val jarvisAi: JarvisAI,
     private val speechManager: SpeechManager,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    val agoraVoiceAgent: AgoraVoiceAgent
 ) : ViewModel() {
+
+    val agoraState = agoraVoiceAgent.state
+    val agoraTranscripts = agoraVoiceAgent.transcripts
+
+    fun toggleAgoraVoice() {
+        if (agoraState.value !is com.rajon.jarvis.agora.AgoraSessionState.Idle &&
+            agoraState.value !is com.rajon.jarvis.agora.AgoraSessionState.Error
+        ) {
+            agoraVoiceAgent.stop()
+            _error.value = "Agora voice session ended."
+        } else {
+            speechManager.stopListening()
+            speechManager.stopSpeaking()
+            viewModelScope.launch {
+                _error.value = agoraVoiceAgent.start()
+            }
+        }
+    }
 
     private val _transcript = MutableStateFlow("")
     val transcript: StateFlow<String> = _transcript.asStateFlow()

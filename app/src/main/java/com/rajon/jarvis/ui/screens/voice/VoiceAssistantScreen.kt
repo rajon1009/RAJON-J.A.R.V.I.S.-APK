@@ -66,6 +66,7 @@ import com.rajon.jarvis.ui.theme.JarvisCyan
 import com.rajon.jarvis.ui.theme.JarvisCyanDark
 import com.rajon.jarvis.ui.theme.JarvisDarkBackground
 import com.rajon.jarvis.ui.theme.JarvisDarkSurface
+import com.rajon.jarvis.ui.theme.JarvisError
 import com.rajon.jarvis.ui.theme.JarvisOrange
 import com.rajon.jarvis.ui.theme.JarvisSuccess
 import kotlinx.coroutines.launch
@@ -83,6 +84,8 @@ fun VoiceAssistantScreen(
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
     val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
+    val agoraState by viewModel.agoraState.collectAsStateWithLifecycle()
+    val agoraTranscripts by viewModel.agoraTranscripts.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -333,6 +336,63 @@ fun VoiceAssistantScreen(
                         fontSize = 11.sp,
                         textAlign = TextAlign.Start
                     )
+                }
+            }
+
+            item { HudSectionTitle(text = "AGORA LIVE VOICE", accent = JarvisOrange) }
+
+            item {
+                GlassPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = JarvisOrange.copy(alpha = 0.35f)
+                ) {
+                    val agoraRunning = agoraState !is com.rajon.jarvis.agora.AgoraSessionState.Idle &&
+                        agoraState !is com.rajon.jarvis.agora.AgoraSessionState.Error
+                    val status = when (agoraState) {
+                        is com.rajon.jarvis.agora.AgoraSessionState.Connecting -> "Connecting…"
+                        is com.rajon.jarvis.agora.AgoraSessionState.Listening -> "Listening through Agora…"
+                        is com.rajon.jarvis.agora.AgoraSessionState.Speaking -> "J.A.R.V.I.S. is speaking…"
+                        is com.rajon.jarvis.agora.AgoraSessionState.Error ->
+                            (agoraState as com.rajon.jarvis.agora.AgoraSessionState.Error).message
+                        else -> "Not connected"
+                    }
+                    Text(
+                        text = status,
+                        color = if (agoraState is com.rajon.jarvis.agora.AgoraSessionState.Error) {
+                            JarvisError
+                        } else {
+                            Color.White
+                        },
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.toggleAgoraVoice() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (agoraRunning) JarvisError else JarvisCyan,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (agoraRunning) "End Agora conversation" else "Start Agora conversation")
+                    }
+
+                    if (agoraTranscripts.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        agoraTranscripts.takeLast(6).forEach { entry ->
+                            Text(
+                                text = "${entry.type}: ${entry.text}",
+                                color = if (entry.type.contains("agent", ignoreCase = true)) {
+                                    JarvisCyan
+                                } else {
+                                    Color.LightGray
+                                },
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
