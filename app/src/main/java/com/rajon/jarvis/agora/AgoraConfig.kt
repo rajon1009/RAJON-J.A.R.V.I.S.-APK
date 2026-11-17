@@ -1,5 +1,7 @@
 package com.rajon.jarvis.agora
 
+import com.rajon.jarvis.voice.SpeechPolicy
+
 /**
  * Configuration for the Agora Conversational Voice Agent.
  *
@@ -15,7 +17,6 @@ package com.rajon.jarvis.agora
 data class AgoraConfig(
     val backendUrl: String = "",
     val appId: String = "",
-    val appCertificate: String = "",
     val rtcToken: String = "",
     val restToken: String = "",
     val customerId: String = "",
@@ -28,8 +29,8 @@ data class AgoraConfig(
     val llmUrl: String = "api.openai.com/v1/chat/completions",
     val llmApiKey: String = "",
     val llmModel: String = "gpt-4o-mini",
-    val systemPrompt: String = "You are J.A.R.V.I.S., a loyal and concise personal assistant. Address the user as Sir.",
-    val greetingMessage: String = "Sir, J.A.R.V.I.S. is online and listening.",
+    val systemPrompt: String = "You are J.A.R.V.I.S., a loyal and concise personal assistant. Address the user respectfully. ${SpeechPolicy.BANGLADESHI_BENGALI_RESPONSE_INSTRUCTION}",
+    val greetingMessage: String = "স্যার, জার্ভিস প্রস্তুত আছে এবং শুনছে।",
     val asrLanguage: String = "bn-BD",
     val ttsVendor: String = "microsoft",
     val ttsVoice: String = "bn-BD-NabanitaNeural",
@@ -46,6 +47,15 @@ data class AgoraConfig(
             "Basic ${java.util.Base64.getEncoder().encodeToString("$customerId:$customerSecret".toByteArray())}"
         else -> ""
     }
+
+    /** Never pass Indian Bengali or Hindi selections to the managed Agora agent. */
+    val effectiveAsrLanguage: String
+        get() = if (asrLanguage.equals("bn-IN", true) || asrLanguage.startsWith("hi", true)) "bn-BD" else asrLanguage
+
+    val effectiveTtsVoice: String
+        get() = if (ttsVoice.contains("bn-IN", true) || ttsVoice.startsWith("hi-", true)) {
+            "bn-BD-NabanitaNeural"
+        } else ttsVoice
 }
 
 data class AgoraTranscript(

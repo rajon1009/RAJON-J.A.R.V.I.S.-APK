@@ -257,7 +257,7 @@ fun GeneralSettingsScreen(
                         text = if (voices.isEmpty()) {
                             "No TTS voice found yet. Install Google TTS voice data (Bengali bn-BD) from Android Settings > Accessibility/Text-to-speech output."
                         } else {
-                            "J.A.R.V.I.S. prefers a bn-BD male voice, then bn-IN, then any Bengali voice, then English."
+                            "J.A.R.V.I.S. Bangladesh Bengali output-এর জন্য শুধু bn-BD voice ব্যবহার করে; English command বোঝার জন্য আলাদা recognition fallback আছে।"
                         },
                         color = Color.Gray,
                         fontSize = 11.sp

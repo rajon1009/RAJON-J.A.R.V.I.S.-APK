@@ -7,6 +7,7 @@ import com.rajon.jarvis.data.local.PreferencesManager
 import com.rajon.jarvis.data.model.ChatMessage
 import com.rajon.jarvis.repository.ChatRepository
 import com.rajon.jarvis.voice.SpeechManager
+import com.rajon.jarvis.voice.SpeechPolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -72,18 +73,21 @@ class ChatViewModel @Inject constructor(
                 }
                 val ttsEnabled = preferencesManager.isTtsEnabled.first()
                 if (ttsEnabled && result.replyText.isNotBlank()) {
-                    val lang = preferencesManager.language.first()
+                    val lang = SpeechPolicy.replyLanguage(
+                        preferencesManager.language.first(),
+                        SpeechPolicy.detect(trimmed)
+                    )
                     val savedVoice = preferencesManager.ttsVoice.first()
                     if (savedVoice.isNotBlank()) {
                         speechManager.setPreferredVoice(savedVoice)
                     }
                     val spoken = speechManager.speak(result.replyText, lang)
                     if (!spoken && !result.isError) {
-                        _errorMessage.value = "Speech output is unavailable on this device. Text reply shown above."
+                        _errorMessage.value = "এই ডিভাইসে speech output পাওয়া যায়নি। উপরের উত্তরটি দেখুন।"
                     }
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Unexpected error: ${e.message ?: "unknown"}"
+                _errorMessage.value = "অপ্রত্যাশিত সমস্যা হয়েছে: ${e.message ?: "অজানা"}"
             } finally {
                 _isThinking.value = false
             }
@@ -99,15 +103,16 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val voiceInputEnabled = preferencesManager.isVoiceInputEnabled.first()
             if (!voiceInputEnabled) {
-                _errorMessage.value = "Voice input is disabled. Enable it in General Settings."
+                _errorMessage.value = "ভয়েস ইনপুট বন্ধ আছে। General Settings থেকে এটি চালু করুন।"
                 return@launch
             }
 
             speechManager.stopSpeaking()
             val lang = preferencesManager.language.first()
-            val localeStr = if (lang == "bn") "bn-BD" else "en-US"
+            val localeStr = SpeechPolicy.sttPrimaryLocale(lang)
             speechManager.startListening(
                 language = localeStr,
+                fallbackLanguage = SpeechPolicy.sttFallbackLocale(lang),
                 onResult = { recognizedText ->
                     if (recognizedText.isNotBlank()) {
                         sendMessage(recognizedText, fromVoice = true)

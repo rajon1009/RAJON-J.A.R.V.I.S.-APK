@@ -6,6 +6,7 @@ import com.rajon.jarvis.agora.AgoraVoiceAgent
 import com.rajon.jarvis.ai.JarvisAI
 import com.rajon.jarvis.data.local.PreferencesManager
 import com.rajon.jarvis.voice.SpeechManager
+import com.rajon.jarvis.voice.SpeechPolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,26 +64,28 @@ class VoiceAssistantViewModel @Inject constructor(
 
         viewModelScope.launch {
             if (!preferencesManager.isVoiceInputEnabled.first()) {
-                _error.value = "Voice input is disabled. Enable it in General Settings."
+                _error.value = "ভয়েস ইনপুট বন্ধ আছে। General Settings থেকে এটি চালু করুন।"
                 return@launch
             }
             if (!speechManager.isRecognitionAvailable()) {
-                _error.value = "Speech recognition is not available on this device."
+                _error.value = "এই ডিভাইসে speech recognition পাওয়া যায়নি।"
                 return@launch
             }
 
             val language = preferencesManager.language.first()
-            val locale = if (language == "bn") "bn-BD" else "en-US"
+            val locale = SpeechPolicy.sttPrimaryLocale(language)
+            val fallbackLocale = SpeechPolicy.sttFallbackLocale(language)
             speechManager.stopSpeaking()
 
             speechManager.startListening(
                 language = locale,
+                fallbackLanguage = fallbackLocale,
                 onResult = { text ->
                     _transcript.value = text
                     if (text.isNotBlank()) {
                         submit(text)
                     } else {
-                        _error.value = "Could not understand the audio. Please try again."
+                        _error.value = "কথা বোঝা যায়নি। আবার চেষ্টা করুন।"
                     }
                 },
                 onError = { message ->
@@ -108,11 +111,11 @@ class VoiceAssistantViewModel @Inject constructor(
                     }
                     val spoken = speechManager.speak(result.replyText, language)
                     if (!spoken) {
-                        _error.value = "Speech output is unavailable on this device. Read the reply above."
+                        _error.value = "এই ডিভাইসে speech output পাওয়া যায়নি। উপরের উত্তরটি পড়ুন।"
                     }
                 }
             } catch (e: Exception) {
-                _error.value = "Unexpected error: ${e.message ?: "unknown"}"
+                _error.value = "অপ্রত্যাশিত সমস্যা হয়েছে: ${e.message ?: "অজানা"}"
             } finally {
                 _isProcessing.value = false
             }

@@ -6,6 +6,7 @@ import com.rajon.jarvis.data.local.PreferencesManager
 import com.rajon.jarvis.repository.ChatRepository
 import com.rajon.jarvis.repository.MemoryRepository
 import com.rajon.jarvis.voice.SpeechManager
+import com.rajon.jarvis.voice.SpeechPolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -102,9 +103,14 @@ class SettingsViewModel @Inject constructor(
 
     fun selectVoice(voice: SpeechManager.TtsVoiceInfo) {
         viewModelScope.launch {
+            val language = SpeechPolicy.replyLanguage(preferencesManager.language.first(), SpeechPolicy.Detected.NONE)
+            if (language == SpeechPolicy.BN && !SpeechPolicy.isBangladeshBengaliLocale(voice.locale)) {
+                _feedbackMessage.value = "বাংলা output-এর জন্য শুধু বাংলাদেশি bn-BD voice নির্বাচন করা যাবে।"
+                return@launch
+            }
             preferencesManager.setTtsVoice(voice.name)
             speechManager.setPreferredVoice(voice.name)
-            _feedbackMessage.value = "Voice selected: ${voice.locale} (${voice.name})"
+            _feedbackMessage.value = "ভয়েস নির্বাচন করা হয়েছে: ${voice.locale} (${voice.name})"
         }
     }
 
@@ -115,26 +121,32 @@ class SettingsViewModel @Inject constructor(
             val best = speechManager.bestVoiceFor(language)
             if (best == null) {
                 _feedbackMessage.value =
-                    "No matching TTS voice is installed for $language. Install Bengali voice data in Google TTS settings."
+                    "$language ভাষার উপযোগী TTS voice ইনস্টল করা নেই। Google TTS settings থেকে বাংলা voice data ইনস্টল করুন।"
                 return@launch
             }
             preferencesManager.setTtsVoice(best.name)
             speechManager.setPreferredVoice(best.name)
-            _feedbackMessage.value = "Best voice selected: ${best.locale} (${best.name})"
+            _feedbackMessage.value = "সেরা ভয়েস নির্বাচন করা হয়েছে: ${best.locale} (${best.name})"
         }
     }
 
     fun previewVoice(voice: SpeechManager.TtsVoiceInfo) {
         viewModelScope.launch {
             val language = preferencesManager.language.first()
-            val sample = if (language == "bn") {
-                "স্যার, আমি জে এ আর ভি আই এস। আপনার সহায়ক হিসেবে প্রস্তুত।"
+            if (SpeechPolicy.replyLanguage(language, SpeechPolicy.Detected.NONE) == SpeechPolicy.BN &&
+                !SpeechPolicy.isBangladeshBengaliLocale(voice.locale)
+            ) {
+                _feedbackMessage.value = "বাংলা output-এর জন্য শুধু বাংলাদেশি bn-BD voice preview করা যাবে।"
+                return@launch
+            }
+            val sample = if (SpeechPolicy.normalize(language) == SpeechPolicy.BN) {
+                SpeechPolicy.BENGALI_VOICE_CHECK_SENTENCE
             } else {
                 "Sir, this is J.A.R.V.I.S. Your assistant is ready."
             }
             val spoken = speechManager.speakWithVoice(sample, language, voice.name)
             if (!spoken) {
-                _feedbackMessage.value = "Could not play the preview on this device."
+                _feedbackMessage.value = "এই ডিভাইসে ভয়েস preview চালানো যায়নি।"
             }
         }
     }

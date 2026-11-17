@@ -75,20 +75,21 @@ class SpeechManager @Inject constructor(
 
     /**
      * Picks the best installed voice for a language.
-     * Bengali preference order: bn-BD male > bn-BD > bn-IN > any Bengali > English.
+     * Bengali output uses Bangladesh Bengali only: bn-BD male > bn-BD.
      */
     fun bestVoiceFor(language: String): TtsVoiceInfo? {
         val voices = availableVoices()
         if (voices.isEmpty()) return null
 
         _preferredVoiceName.value?.let { preferred ->
-            voices.firstOrNull { it.name == preferred }?.let { return it }
+            voices.firstOrNull { voice ->
+                voice.name == preferred &&
+                    (language != SpeechPolicy.BN || SpeechPolicy.isBangladeshBengaliLocale(voice.locale))
+            }?.let { return it }
         }
 
-        val candidates: List<TtsVoiceInfo> = if (language == "bn") {
-            voices.filter { it.locale.startsWith("bn-BD") } +
-                voices.filter { it.locale.startsWith("bn-IN") } +
-                voices.filter { it.locale.startsWith("bn") }
+        val candidates: List<TtsVoiceInfo> = if (language == SpeechPolicy.BN) {
+            voices.filter { SpeechPolicy.isBangladeshBengaliLocale(it.locale) }
         } else {
             voices.filter { it.locale.startsWith("en-US") } +
                 voices.filter { it.locale.startsWith("en") }
@@ -139,15 +140,32 @@ class SpeechManager @Inject constructor(
 
     fun startListening(
         language: String = "bn-BD",
+        fallbackLanguage: String? = null,
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         if (!SpeechRecognizer.isRecognitionAvailable(app)) {
-            onError("Speech recognition is not available on this device. Install or enable a speech recognition service.")
+            onError("এই ডিভাইসে speech recognition পাওয়া যায়নি। একটি speech recognition service চালু করুন।")
             return
         }
 
         stopListening()
+        startRecognitionPass(language, fallbackLanguage, allowFallback = true, onResult, onError)
+    }
+
+    /**
+     * Runs one recognition pass.  Android's standard recognizer accepts one locale per
+     * request, so a failed/low-confidence Bengali pass is retried once in English (and
+     * vice versa). This makes mixed Bangla/English commands practical without claiming
+     * that a vendor-specific multilingual recognizer is available.
+     */
+    private fun startRecognitionPass(
+        language: String,
+        fallbackLanguage: String?,
+        allowFallback: Boolean,
+        onResult: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(app).apply {
             setRecognitionListener(object : RecognitionListener {
@@ -165,31 +183,43 @@ class SpeechManager @Inject constructor(
 
                 override fun onError(error: Int) {
                     _isListening.value = false
+                    releaseRecognizer()
+                    if (allowFallback && fallbackLanguage != null &&
+                        (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+                    ) {
+                        startRecognitionPass(fallbackLanguage, null, false, onResult, onError)
+                        return
+                    }
                     val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "No speech detected. Please try again."
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Please try again."
-                        SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition timed out. Check your connection."
-                        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Check the microphone."
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required for voice commands."
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Wait a moment and try again."
-                        SpeechRecognizer.ERROR_SERVER -> "Speech recognition server error. Try again."
-                        SpeechRecognizer.ERROR_CLIENT -> "Speech recognition was interrupted."
-                        else -> "Speech recognition error ($error)."
+                        SpeechRecognizer.ERROR_NO_MATCH -> "কথা বোঝা যায়নি। আবার চেষ্টা করুন।"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শোনা যায়নি। আবার চেষ্টা করুন।"
+                        SpeechRecognizer.ERROR_NETWORK -> "কথা শনাক্ত করার সময় নেটওয়ার্ক সমস্যা হয়েছে।"
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "কথা শনাক্ত করার সময় শেষ হয়েছে। সংযোগ পরীক্ষা করুন।"
+                        SpeechRecognizer.ERROR_AUDIO -> "অডিও রেকর্ডিংয়ে সমস্যা হয়েছে। মাইক্রোফোন পরীক্ষা করুন।"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ভয়েস কমান্ডের জন্য মাইক্রোফোনের অনুমতি প্রয়োজন।"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer ব্যস্ত আছে। একটু পরে চেষ্টা করুন।"
+                        SpeechRecognizer.ERROR_SERVER -> "Speech recognition server-এ সমস্যা হয়েছে। আবার চেষ্টা করুন।"
+                        SpeechRecognizer.ERROR_CLIENT -> "কথা শনাক্তকরণ বন্ধ হয়ে গেছে।"
+                        else -> "কথা শনাক্তকরণে সমস্যা হয়েছে ($error)।"
                     }
                     onError(errorMsg)
-                    releaseRecognizer()
                 }
 
                 override fun onResults(results: Bundle?) {
                     _isListening.value = false
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        onResult(matches[0])
-                    } else {
-                        onError("Could not understand the audio. Please try again.")
-                    }
+                    val scores = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
                     releaseRecognizer()
+                    if (!matches.isNullOrEmpty() &&
+                        !(allowFallback && fallbackLanguage != null && SpeechPolicy.confidenceTooLow(scores))
+                    ) {
+                        onResult(matches[0])
+                    } else if (allowFallback && fallbackLanguage != null) {
+                        startRecognitionPass(fallbackLanguage, null, false, onResult, onError)
+                    } else {
+                        onError("কথা বোঝা যায়নি। আবার চেষ্টা করুন।")
+                    }
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {}
@@ -246,8 +276,12 @@ class SpeechManager @Inject constructor(
         }
         if (text.isBlank()) return false
 
-        applyLanguageFor(language)
-        applyBestVoice(language)
+        val replyLanguage = SpeechPolicy.replyLanguage(language, SpeechPolicy.Detected.NONE)
+        if (!applyLanguageFor(replyLanguage)) {
+            Log.w(TAG, "No supported TTS locale for $replyLanguage")
+            return false
+        }
+        applyBestVoice(replyLanguage)
 
         _isSpeaking.value = true
         val result = tts.speak(
@@ -262,18 +296,10 @@ class SpeechManager @Inject constructor(
         return result == TextToSpeech.SUCCESS
     }
 
-    private fun applyLanguageFor(language: String) {
-        if (language == "bn") {
-            val candidates = listOf(
-                Locale("bn", "BD"),
-                Locale("bn", "IN"),
-                Locale("bn")
-            )
-            for (locale in candidates) {
-                if (applyTtsLanguage(locale)) return
-            }
-            // Bengali voice is unavailable on this device; fall back to English.
-            applyTtsLanguage(Locale.US)
+    private fun applyLanguageFor(language: String): Boolean {
+        return if (language == SpeechPolicy.BN) {
+            // Do not make a Bangladesh Bengali reply sound Indian, Hindi or English.
+            applyTtsLanguage(Locale("bn", "BD"))
         } else {
             applyTtsLanguage(Locale.US)
         }
@@ -291,6 +317,13 @@ class SpeechManager @Inject constructor(
 
     /** Speaks with a specific voice, useful for the voice picker preview. */
     fun speakWithVoice(text: String, language: String, voiceName: String): Boolean {
+        if (SpeechPolicy.replyLanguage(language, SpeechPolicy.Detected.NONE) == SpeechPolicy.BN) {
+            val voice = availableVoices().firstOrNull { it.name == voiceName }
+            if (voice == null || !SpeechPolicy.isBangladeshBengaliLocale(voice.locale)) {
+                Log.w(TAG, "Refusing non-bn-BD voice preview for Bangladesh Bengali output")
+                return false
+            }
+        }
         setPreferredVoice(voiceName)
         return speak(text, language)
     }

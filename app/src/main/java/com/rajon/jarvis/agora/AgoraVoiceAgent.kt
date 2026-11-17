@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.JsonParser
 import com.rajon.jarvis.ai.provider.HttpTransport
 import com.rajon.jarvis.data.local.PreferencesManager
+import com.rajon.jarvis.voice.SpeechPolicy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.agora.conversational.api.ConversationalAIAPIConfig
 import io.agora.conversational.api.ConversationalAIAPIImpl
@@ -308,7 +309,7 @@ class AgoraVoiceAgent @Inject constructor(
             "asr": {
               $mode
               "vendor": "microsoft",
-              "params": {"language": "${config.asrLanguage}"}
+              "params": {"language": "${config.effectiveAsrLanguage}"}
             }
         """.trimIndent()
     }
@@ -323,9 +324,9 @@ class AgoraVoiceAgent @Inject constructor(
               $apiKey
               "url": "${config.llmUrl}",
               "style": "openai",
-              "system_messages": [{"role": "system", "content": "${config.systemPrompt.replace("\"", "\\\"")}"}],
+              "system_messages": [{"role": "system", "content": "${(config.systemPrompt + " " + SpeechPolicy.BANGLADESHI_BENGALI_RESPONSE_INSTRUCTION).replace("\"", "\\\"")}"}],
               "greeting_message": "${config.greetingMessage.replace("\"", "\\\"")}",
-              "failure_message": "Sir, I could not answer that just now.",
+              "failure_message": "দুঃখিত স্যার, এই মুহূর্তে উত্তর দিতে পারছি না।",
               "max_history": 10,
               "params": {"model": "${config.llmModel}"}
             }
@@ -338,7 +339,7 @@ class AgoraVoiceAgent @Inject constructor(
             "tts": {
               $mode
               "vendor": "${config.ttsVendor}",
-              "params": {"voice_name": "${config.ttsVoice}"}
+              "params": {"voice_name": "${config.effectiveTtsVoice}"}
             }
         """.trimIndent()
     }

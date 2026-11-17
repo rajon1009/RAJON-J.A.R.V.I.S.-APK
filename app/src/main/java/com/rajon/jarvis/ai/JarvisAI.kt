@@ -10,6 +10,7 @@ import com.rajon.jarvis.data.model.MessageRole
 import com.rajon.jarvis.device.DeviceController
 import com.rajon.jarvis.device.ReminderManager
 import com.rajon.jarvis.repository.MemoryRepository
+import com.rajon.jarvis.voice.SpeechPolicy
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,7 +39,10 @@ class JarvisAI @Inject constructor(
         conversationManager.recordUserMessage(userText)
 
         val owner = preferencesManager.ownerName.first()
-        val language = preferencesManager.language.first()
+        val language = SpeechPolicy.replyLanguage(
+            preferencesManager.language.first(),
+            SpeechPolicy.detect(userText)
+        )
 
         if (aiRouter.activeProviders().isEmpty()) {
             val fallback = if (language == "bn") {
@@ -112,7 +116,11 @@ class JarvisAI @Inject constructor(
         }
 
         if (cleanedText.isBlank()) {
-            cleanedText = "No response from neural core."
+            cleanedText = if (language == SpeechPolicy.BN) {
+                "নিউরাল কোর থেকে কোনো উত্তর পাওয়া যায়নি।"
+            } else {
+                "No response from neural core."
+            }
         }
 
         conversationManager.recordAssistantMessage(cleanedText)
@@ -136,7 +144,7 @@ class JarvisAI @Inject constructor(
 You are J.A.R.V.I.S., the ultimate personal Artificial Intelligence assistant created exclusively for your owner and master, $owner Sir.
 Personality & Rules:
 1. Always address the owner respectfully as "$owner Sir" or "Sir".
-2. You speak natural fluent ${if (language == "bn") "Bengali (Bangla)" else "English"}. You can also seamlessly switch between Bangla and English based on the language Sir speaks to you.
+2. You speak ${if (language == SpeechPolicy.BN) "natural, standard Bangladeshi Bengali (Bangla)" else "natural English"}. ${if (language == SpeechPolicy.BN) SpeechPolicy.BANGLADESHI_BENGALI_RESPONSE_INSTRUCTION else "An explicit English preference is enabled."}
 3. You are confident, polite, proactive, highly intelligent, and loyal.
 4. Keep spoken answers concise (2-4 sentences) unless Sir asks for detail, because replies are read aloud.
 5. If Sir asks you to do an Android device task, you MUST append an executable JSON action block at the end of your response in this exact format:
@@ -170,17 +178,17 @@ ${memories.ifBlank { "- none yet" }}
         return when (action) {
             is JarvisAction.CheckBattery -> {
                 val (level, charging) = deviceController.getBatteryInfo()
-                if (language == "bn") "ব্যাটারি লেভেল: $level% ${if (charging) "(চার্জ হচ্ছে)" else ""}"
+                if (language == SpeechPolicy.BN) "ব্যাটারির চার্জ: $level% ${if (charging) "(চার্জ হচ্ছে)" else ""}"
                 else "Battery Level: $level% ${if (charging) "(Charging)" else ""}"
             }
             is JarvisAction.CheckStorage -> {
                 val st = deviceController.getStorageInfo()
-                if (language == "bn") "স্টোরেজ: ${"%.1f".format(st.availableGB)} GB খালি আছে (মোট ${"%.1f".format(st.totalGB)} GB)"
+                if (language == SpeechPolicy.BN) "স্টোরেজে ${"%.1f".format(st.availableGB)} GB খালি আছে (মোট ${"%.1f".format(st.totalGB)} GB)।"
                 else "Storage: ${"%.1f".format(st.availableGB)} GB free of ${"%.1f".format(st.totalGB)} GB total"
             }
             is JarvisAction.CheckInternet -> {
                 val net = deviceController.getNetworkInfo()
-                if (language == "bn") "ইন্টারনেট অবস্থা: ${net.networkType} (সংযুক্ত: ${net.isConnected})"
+                if (language == SpeechPolicy.BN) "ইন্টারনেটের অবস্থা: ${net.networkType} (সংযুক্ত: ${net.isConnected})"
                 else "Internet Status: ${net.networkType} (Connected: ${net.isConnected})"
             }
             is JarvisAction.CheckPerformance -> {
