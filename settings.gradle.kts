@@ -17,6 +17,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Agora's Conversational AI client toolkit is published on JitPack.
+        maven { url = uri("https://www.jitpack.io") }
     }
 }
 
