@@ -65,13 +65,7 @@ class SpeechManager @Inject constructor(
                 TtsVoiceInfo(
                     name = voice.name,
                     locale = voice.locale.toLanguageTag(),
-                    quality = when (voice.quality) {
-                        android.speech.tts.Voice.Quality.VERY_HIGH -> "very high"
-                        android.speech.tts.Voice.Quality.HIGH -> "high"
-                        android.speech.tts.Voice.Quality.NORMAL -> "normal"
-                        android.speech.tts.Voice.Quality.LOW -> "low"
-                        else -> "unknown"
-                    },
+                    quality = voice.quality.toString(),
                     networkRequired = voice.isNetworkConnectionRequired,
                     isMale = lower.contains("male") && !lower.contains("female")
                 )
