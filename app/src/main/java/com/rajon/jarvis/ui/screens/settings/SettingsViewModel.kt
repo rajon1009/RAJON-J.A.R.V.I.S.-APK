@@ -47,33 +47,34 @@ class SettingsViewModel @Inject constructor(
         val ownerName: String,
         val language: String,
         val isDarkMode: Boolean,
-        val isTtsEnabled: Boolean,
-        val ttsVoice: String
+        val isTtsEnabled: Boolean
     )
 
     val uiState: StateFlow<SettingsUiState> = combine(
         combine(
-            preferencesManager.geminiApiKey,
-            preferencesManager.ownerName,
-            preferencesManager.language,
-            preferencesManager.isDarkMode,
-            preferencesManager.isTtsEnabled,
+            combine(
+                preferencesManager.geminiApiKey,
+                preferencesManager.ownerName,
+                preferencesManager.language,
+                preferencesManager.isDarkMode,
+                preferencesManager.isTtsEnabled
+            ) { key, owner, lang, dark, tts ->
+                CoreState(key, owner, lang, dark, tts)
+            },
             preferencesManager.ttsVoice
-        ) { key, owner, lang, dark, tts, voice ->
-            CoreState(key, owner, lang, dark, tts, voice)
-        },
+        ) { core, voice -> core to voice },
         combine(preferencesManager.isVoiceInputEnabled, _feedbackMessage) { voice, feedback ->
             voice to feedback
         }
-    ) { core, (voice, feedback) ->
+    ) { (core, voice), (voiceInput, feedback) ->
         SettingsUiState(
             apiKey = core.apiKey,
             ownerName = core.ownerName,
             language = core.language,
             isDarkMode = core.isDarkMode,
             isTtsEnabled = core.isTtsEnabled,
-            isVoiceInputEnabled = voice,
-            ttsVoice = core.ttsVoice,
+            isVoiceInputEnabled = voiceInput,
+            ttsVoice = voice,
             feedbackMessage = feedback
         )
     }.stateIn(
