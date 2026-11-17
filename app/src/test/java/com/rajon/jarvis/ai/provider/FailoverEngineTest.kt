@@ -80,7 +80,7 @@ class FailoverEngineTest {
         assertEquals("alpha answer", outcome.text)
         assertEquals("alpha", outcome.providerId)
         assertEquals(1, outcome.attempts.size)
-        assertEquals(1, second.calls)
+        assertEquals(0, second.calls) // the second provider is never called
     }
 
     @Test
