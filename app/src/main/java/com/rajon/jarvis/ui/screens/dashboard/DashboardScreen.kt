@@ -247,7 +247,8 @@ fun DashboardScreen(
                 SystemLinkPanel(
                     isAiConfigured = state.isAiConfigured,
                     deviceName = "${state.deviceInfo.deviceBrand} ${state.deviceInfo.deviceModel}".trim(),
-                    androidVersion = state.deviceInfo.androidVersion
+                    androidVersion = state.deviceInfo.androidVersion,
+                    aiChainText = state.aiChainText
                 )
             }
         }
@@ -395,7 +396,8 @@ private fun TelemetryTile(
 private fun SystemLinkPanel(
     isAiConfigured: Boolean,
     deviceName: String,
-    androidVersion: String
+    androidVersion: String,
+    aiChainText: String
 ) {
     GlassPanel(
         modifier = Modifier.fillMaxWidth(),
@@ -405,6 +407,11 @@ private fun SystemLinkPanel(
         Spacer(modifier = Modifier.height(10.dp))
         LinkRow("AI MODEL", GeminiClient.MODEL_NAME, JarvisCyan)
         LinkRow("API", "Gemini REST ${GeminiClient.API_VERSION}", JarvisCyan)
+        LinkRow(
+            "AI CHAIN",
+            aiChainText,
+            if (aiChainText == "No provider") JarvisOrange else JarvisCyan
+        )
         LinkRow(
             "AI KEY",
             if (isAiConfigured) "Configured" else "Not configured",

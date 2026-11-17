@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "configurations": [
+    {
+      "name": "Build debug APK",
+      "type": "terminal",
+      "command": "adev ./gradlew assembleDebug --console=plain"
+    },
+    {
+      "name": "Run unit tests",
+      "type": "terminal",
+      "command": "adev ./gradlew testDebugUnitTest --console=plain"
+    },
+    {
+      "name": "Build, install & open",
+      "type": "terminal",
+      "command": "adev ./gradlew assembleDebug --console=plain && adb install -r app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n com.rajon.jarvis.debug/com.rajon.jarvis.MainActivity"
+    },
+    {
+      "name": "Install with Android's installer",
+      "type": "terminal",
+      "command": "termux-open app/build/outputs/apk/debug/app-debug.apk"
+    }
+  ]
+}

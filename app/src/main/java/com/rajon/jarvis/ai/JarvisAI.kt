@@ -1,6 +1,10 @@
 package com.rajon.jarvis.ai
 
 import android.provider.Settings
+import com.rajon.jarvis.ai.provider.AiRouter
+import com.rajon.jarvis.ai.provider.AiTask
+import com.rajon.jarvis.ai.provider.AiTaskClassifier
+import com.rajon.jarvis.ai.provider.FailoverOutcome
 import com.rajon.jarvis.data.local.PreferencesManager
 import com.rajon.jarvis.data.model.MessageRole
 import com.rajon.jarvis.device.DeviceController
@@ -13,7 +17,11 @@ import javax.inject.Singleton
 data class JarvisAiResult(
     val replyText: String,
     val executedActionDescription: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    /** Which provider produced the answer, e.g. "Google Gemini". */
+    val providerLabel: String? = null,
+    /** Human readable failover trail, empty when the first provider answered. */
+    val failoverTrail: List<String> = emptyList()
 )
 
 @Singleton
@@ -23,16 +31,16 @@ class JarvisAI @Inject constructor(
     private val reminderManager: ReminderManager,
     private val memoryRepository: MemoryRepository,
     private val conversationManager: ConversationManager,
-    private val geminiClient: GeminiClient
+    private val geminiClient: GeminiClient,
+    private val aiRouter: AiRouter
 ) {
-    suspend fun processUserRequest(userText: String): JarvisAiResult {
+    suspend fun processUserRequest(userText: String, fromVoice: Boolean = false): JarvisAiResult {
         conversationManager.recordUserMessage(userText)
 
-        val apiKey = preferencesManager.geminiApiKey.first()
         val owner = preferencesManager.ownerName.first()
         val language = preferencesManager.language.first()
 
-        if (apiKey.isBlank()) {
+        if (aiRouter.activeProviders().isEmpty()) {
             val fallback = if (language == "bn") {
                 "$owner স্যার, দয়া করে AI Settings-এ গিয়ে আপনার Gemini API Key সেট করুন।"
             } else {
@@ -52,23 +60,42 @@ class JarvisAI @Inject constructor(
             }
         }
 
-        val outcome = geminiClient.generate(
-            apiKey = apiKey,
+        val task: AiTask = AiTaskClassifier.classify(userText, fromVoice)
+
+        val outcome = aiRouter.generate(
             systemInstruction = buildSystemInstruction(owner, language),
             history = history,
-            userText = userText
+            userText = userText,
+            task = task
         )
 
-        val rawResponse = when (outcome) {
-            is GeminiOutcome.Success -> outcome.text
-            is GeminiOutcome.Failure -> {
+        val rawResponse: String
+        var providerLabel: String? = null
+        var failoverTrail: List<String> = emptyList
+
+        when (outcome) {
+            is FailoverOutcome.Success -> {
+                rawResponse = outcome.text
+                providerLabel = "${outcome.displayName} - ${outcome.model}"
+                failoverTrail = outcome.attempts
+                    .filter { !it.success }
+                    .map { "${it.displayName}: ${it.message ?: "failed"}" }
+            }
+
+            is FailoverOutcome.Failure -> {
+                val detail = outcome.message
                 val message = if (language == "bn") {
-                    "স্যার, নিউরাল কোরের সাথে সংযোগ করা যায়নি। ${outcome.userMessage}"
+                    "স্যার, নিউরাল কোরের সাথে সংযোগ করা যায়নি। $detail"
                 } else {
-                    "Sir, I could not reach my neural core. ${outcome.userMessage}"
+                    "Sir, I could not reach my neural core. $detail"
                 }
                 conversationManager.recordAssistantMessage(message)
-                return JarvisAiResult(message, isError = true)
+                return JarvisAiResult(
+                    replyText = message,
+                    isError = true,
+                    providerLabel = null,
+                    failoverTrail = outcome.attempts.map { "${it.displayName}: ${it.message ?: "failed"}" }
+                )
             }
         }
 
@@ -89,7 +116,12 @@ class JarvisAI @Inject constructor(
         }
 
         conversationManager.recordAssistantMessage(cleanedText)
-        return JarvisAiResult(cleanedText, actionSummary)
+        return JarvisAiResult(
+            replyText = cleanedText,
+            executedActionDescription = actionSummary,
+            providerLabel = providerLabel,
+            failoverTrail = failoverTrail
+        )
     }
 
     suspend fun testConnection(apiKey: String): ConnectionTestResult {

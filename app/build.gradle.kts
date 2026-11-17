@@ -15,14 +15,30 @@ android {
         applicationId = "com.rajon.jarvis"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.1.3"
+        versionCode = 6
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
         buildConfigField("String", "GEMINI_API_KEY", "\"\"")
+    }
+
+    // Optional explicit debug signing. CI passes these properties so every
+    // published build is signed with the same key and can be installed over the
+    // previous one. Local builds fall back to the standard AGP debug key.
+    val customKeystorePath = providers.gradleProperty("jarvis.keystore.path").orNull
+
+    signingConfigs {
+        if (customKeystorePath != null) {
+            create("jarvis") {
+                storeFile = file(customKeystorePath)
+                storePassword = providers.gradleProperty("jarvis.keystore.password").orNull
+                keyAlias = providers.gradleProperty("jarvis.keystore.alias").orNull
+                keyPassword = providers.gradleProperty("jarvis.keystore.password").orNull
+            }
+        }
     }
 
     buildTypes {
@@ -37,6 +53,9 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             isDebuggable = true
+            if (customKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("jarvis")
+            }
         }
     }
 

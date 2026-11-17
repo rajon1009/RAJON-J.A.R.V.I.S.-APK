@@ -28,6 +28,7 @@ class PreferencesManager @Inject constructor(
         val KEY_DARK_MODE = booleanPreferencesKey("dark_mode")
         val KEY_TTS_ENABLED = booleanPreferencesKey("tts_enabled")
         val KEY_VOICE_INPUT_ENABLED = booleanPreferencesKey("voice_input_enabled")
+        val KEY_TTS_VOICE = stringPreferencesKey("tts_voice")
     }
 
     val language: Flow<String> = dataStore.data.map { it[KEY_LANGUAGE] ?: "bn" }
@@ -36,6 +37,7 @@ class PreferencesManager @Inject constructor(
     val isDarkMode: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_MODE] ?: true }
     val isTtsEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_TTS_ENABLED] ?: true }
     val isVoiceInputEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_VOICE_INPUT_ENABLED] ?: true }
+    val ttsVoice: Flow<String> = dataStore.data.map { it[KEY_TTS_VOICE] ?: "" }
 
     suspend fun setLanguage(lang: String) {
         dataStore.edit { it[KEY_LANGUAGE] = lang }
@@ -59,6 +61,10 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setVoiceInputEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_VOICE_INPUT_ENABLED] = enabled }
+    }
+
+    suspend fun setTtsVoice(name: String) {
+        dataStore.edit { it[KEY_TTS_VOICE] = name }
     }
 
     suspend fun getApiKeyOnce(): String {

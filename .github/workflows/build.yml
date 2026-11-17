@@ -33,11 +33,24 @@ jobs:
       # Android refuses to update an app signed with a different certificate.
       # GitHub-hosted runners start with no debug keystore, so without this cache
       # every run produces a new signing identity and users must uninstall first.
-      - name: Restore persistent debug keystore
+      - name: Restore persistent signing keystore
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: jarvis-debug-keystore-v1
+          path: ~/.jarvis-keystore/debug.keystore
+          key: jarvis-signing-keystore-v1
+
+      - name: Prepare signing keystore
+        run: |
+          set -e
+          mkdir -p "$HOME/.jarvis-keystore"
+          if [ ! -f "$HOME/.jarvis-keystore/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.jarvis-keystore/debug.keystore" \
+              -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=JARVIS Debug,O=Rajon,C=BD" 2>/dev/null
+          fi
+          echo "Keystore ready: $HOME/.jarvis-keystore/debug.keystore"
 
       - name: Run Action Parser Unit Tests
         continue-on-error: true
@@ -46,7 +59,10 @@ jobs:
       - name: Build Debug APK
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
+          ./gradlew assembleDebug --console=plain \
+            -Pjarvis.keystore.path="$HOME/.jarvis-keystore/debug.keystore" \
+            -Pjarvis.keystore.password=android \
+            -Pjarvis.keystore.alias=androiddebugkey 2>&1 | tee build.log
 
       - name: Publish build log on failure
         if: failure()

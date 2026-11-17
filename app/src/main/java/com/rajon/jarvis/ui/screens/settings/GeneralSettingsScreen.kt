@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,6 +61,7 @@ import com.rajon.jarvis.ui.theme.JarvisCyan
 import com.rajon.jarvis.ui.theme.JarvisDarkBackground
 import com.rajon.jarvis.ui.theme.JarvisDarkSurface
 import com.rajon.jarvis.ui.theme.JarvisError
+import com.rajon.jarvis.ui.theme.JarvisOrange
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +70,7 @@ fun GeneralSettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val voices by viewModel.voices.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var ownerNameInput by remember(state.ownerName) { mutableStateOf(state.ownerName) }
@@ -236,6 +239,88 @@ fun GeneralSettingsScreen(
                         checked = state.isDarkMode,
                         onCheckedChange = { viewModel.setDarkMode(it) }
                     )
+                }
+            }
+
+            item { HudSectionTitle(text = "VOICE OUTPUT") }
+
+            item {
+                GlassPanel(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Text-to-Speech voice",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (voices.isEmpty()) {
+                            "No TTS voice found yet. Install Google TTS voice data (Bengali bn-BD) from Android Settings > Accessibility/Text-to-speech output."
+                        } else {
+                            "J.A.R.V.I.S. prefers a bn-BD male voice, then bn-IN, then any Bengali voice, then English."
+                        },
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { viewModel.selectBestVoice() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisCyan),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Use best voice", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.refreshVoices() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisCyan),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Refresh list", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    voices.forEach { voice ->
+                        val isSelected = state.ttsVoice == voice.name
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${voice.locale}${if (voice.isMale) " - male" else ""}",
+                                    color = if (isSelected) JarvisCyan else Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                                Text(
+                                    text = "${voice.name} - ${voice.quality}${if (voice.networkRequired) " - network" else " - offline"}",
+                                    color = Color.Gray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.previewVoice(voice) },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisOrange),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Play", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.size(6.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.selectVoice(voice) },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisCyan),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(if (isSelected) "In use" else "Use", fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
             }
 

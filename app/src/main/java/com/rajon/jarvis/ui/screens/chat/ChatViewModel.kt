@@ -42,13 +42,19 @@ class ChatViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _providerLabel = MutableStateFlow<String?>(null)
+    val providerLabel: StateFlow<String?> = _providerLabel.asStateFlow()
+
+    private val _failoverNotice = MutableStateFlow<String?>(null)
+    val failoverNotice: StateFlow<String?> = _failoverNotice.asStateFlow()
+
     val isListening: StateFlow<Boolean> = speechManager.isListening
 
     fun updateInputText(text: String) {
         _inputText.value = text
     }
 
-    fun sendMessage(text: String = _inputText.value) {
+    fun sendMessage(text: String = _inputText.value, fromVoice: Boolean = false) {
         val trimmed = text.trim()
         if (trimmed.isBlank() || _isThinking.value) return
 
@@ -57,10 +63,20 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val result = jarvisAi.processUserRequest(trimmed)
+                val result = jarvisAi.processUserRequest(trimmed, fromVoice)
+                _providerLabel.value = result.providerLabel?.substringBefore(" - ")
+                _failoverNotice.value = if (result.failoverTrail.isEmpty()) {
+                    null
+                } else {
+                    "Failover: " + result.failoverTrail.joinToString(" -> ")
+                }
                 val ttsEnabled = preferencesManager.isTtsEnabled.first()
                 if (ttsEnabled && result.replyText.isNotBlank()) {
                     val lang = preferencesManager.language.first()
+                    val savedVoice = preferencesManager.ttsVoice.first()
+                    if (savedVoice.isNotBlank()) {
+                        speechManager.setPreferredVoice(savedVoice)
+                    }
                     val spoken = speechManager.speak(result.replyText, lang)
                     if (!spoken && !result.isError) {
                         _errorMessage.value = "Speech output is unavailable on this device. Text reply shown above."
@@ -94,7 +110,7 @@ class ChatViewModel @Inject constructor(
                 language = localeStr,
                 onResult = { recognizedText ->
                     if (recognizedText.isNotBlank()) {
-                        sendMessage(recognizedText)
+                        sendMessage(recognizedText, fromVoice = true)
                     }
                 },
                 onError = { message ->
@@ -106,6 +122,10 @@ class ChatViewModel @Inject constructor(
 
     fun dismissError() {
         _errorMessage.value = null
+    }
+
+    fun dismissFailoverNotice() {
+        _failoverNotice.value = null
     }
 
     fun clearChat() {

@@ -1,10 +1,10 @@
-# RAJON J.A.R.V.I.S. (v1.0)
+# RAJON J.A.R.V.I.S. (v1.2.0)
 ### Personal Artificial Intelligence Assistant for Android
 
 **Owner:** Rajon  
 **Platform:** Android 8.0+ (API 26+) · Target Android 15 (API 35)  
 **Primary Languages:** Bengali (বাংলা) & English  
-**Architecture:** MVVM + Jetpack Compose + Clean Architecture + Hilt DI + Room DB + Google Gemini Generative AI  
+**Architecture:** MVVM + Jetpack Compose + Clean Architecture + Hilt DI + Room DB + Multi-AI provider router (Gemini / Claude / GPT / Grok / DeepSeek / Qwen / Llama / Mistral / Kimi / GLM / Cohere)  
 
 ---
 
@@ -24,7 +24,11 @@
 ```mermaid
 graph TD
     UI[Jetpack Compose UI & Screens] --> VM[ViewModels (Hilt)]
-    VM --> AI[JarvisAI Brain (Gemini 1.5 Flash)]
+    VM --> AI[JarvisAI Brain]
+    AI --> ROUTER[AiRouter - multi-AI failover]
+    ROUTER --> P1[Gemini Provider]
+    ROUTER --> P2[OpenAI-compatible Provider]
+    ROUTER --> P3[Anthropic Provider]
     VM --> DEV[DeviceController]
     VM --> REPO[Repositories]
     REPO --> ROOM[Room Local SQLite DB]
@@ -38,9 +42,34 @@ graph TD
 - **Dependency Injection:** Dagger Hilt 2.51
 - **Database:** Room SQLite 2.6.1 with Coroutines Flow
 - **Preferences:** Jetpack DataStore Preferences
-- **AI Brain:** Google Generative AI (Gemini 1.5 Flash) with fallback offline replies
-- **Speech Engine:** Android `SpeechRecognizer` & `TextToSpeech` with Bengali (`bn-BD`) and English support
+- **AI Brain:** provider-agnostic core — Gemini native REST, any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, DeepSeek, xAI, Mistral, Qwen, Moonshot, Z.ai, Cohere, Together) and the Anthropic Messages API
+- **Speech Engine:** Android `SpeechRecognizer` & `TextToSpeech` with Bengali (`bn-BD`) and English support, best-voice selection (bn-BD male first) and a voice picker
 - **Background Tasks:** Android Foreground Service with persistent status notifications and Boot receiver
+
+---
+
+## 🧠 Multi-AI Core & Automatic Failover
+
+`AiRouter` resolves every enabled provider that has a credential and a model, orders them
+by task specialisation and priority, and calls them until one answers:
+
+| Situation | What J.A.R.V.I.S. does |
+|---|---|
+| Provider returns **429** (quota / rate limit) | marks it as cooling down and immediately tries the next provider |
+| Provider returns **5xx** | same hand-over |
+| **Timeout / dropped connection** | same hand-over, the conversation continues |
+| Network returns an **empty 404** (middlebox) | same hand-over and reports the network problem |
+| Provider answers | the reply is shown with the provider name, and the chat header shows which brain answered |
+
+* Conversation history and the J.A.R.V.I.S. system prompt are handed to the next provider
+  unchanged, so a switch never loses context.
+* Task routing (`AiTaskClassifier`) prefers coding/research specialists for code and
+  research requests, a fast model for short conversation and Bengali-aware models for
+  Bengali text.
+* Providers are configured in **More → AI Settings**. Each card has its own key, model,
+  *Models* (live discovery from the provider's `/models` endpoint) and *Test* button.
+* The **OpenRouter** preset is the cheapest way to reach Claude, GPT, Gemini, Llama, Qwen,
+  DeepSeek and Grok with a single key.
 
 ---
 

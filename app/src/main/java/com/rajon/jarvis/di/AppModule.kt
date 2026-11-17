@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.rajon.jarvis.ai.provider.FailoverEngine
 import com.rajon.jarvis.data.local.ChatMessageDao
 import com.rajon.jarvis.data.local.JarvisDatabase
 import com.rajon.jarvis.data.local.MemoryDao
@@ -45,4 +46,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideGson(): Gson = GsonBuilder().create()
+
+    @Provides
+    @Singleton
+    fun provideFailoverEngine(): FailoverEngine = FailoverEngine()
 }

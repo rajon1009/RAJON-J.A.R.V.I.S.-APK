@@ -37,11 +37,75 @@ class SpeechManager @Inject constructor(
     private val _isTtsReady = MutableStateFlow(false)
     val isTtsReady: StateFlow<Boolean> = _isTtsReady.asStateFlow()
 
+    private val _preferredVoiceName = MutableStateFlow<String?>(null)
+    val preferredVoiceName: StateFlow<String?> = _preferredVoiceName.asStateFlow()
+
+    /** One installed TTS voice, normalised for the UI. */
+    data class TtsVoiceInfo(
+        val name: String,
+        val locale: String,
+        val quality: String,
+        val networkRequired: Boolean,
+        val isMale: Boolean
+    )
+
     init {
         initTts()
     }
 
     fun isRecognitionAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(app)
+
+    /** Every voice the installed TTS engine exposes. */
+    fun availableVoices(): List<TtsVoiceInfo> {
+        val tts = textToSpeech ?: return emptyList()
+        if (!isTtsInitialized) return emptyList()
+        return runCatching {
+            tts.voices.orEmpty().map { voice ->
+                val lower = voice.name.lowercase()
+                TtsVoiceInfo(
+                    name = voice.name,
+                    locale = voice.locale.toLanguageTag(),
+                    quality = when (voice.quality) {
+                        TextToSpeech.Quality.VERY_HIGH -> "very high"
+                        TextToSpeech.Quality.HIGH -> "high"
+                        TextToSpeech.Quality.NORMAL -> "normal"
+                        TextToSpeech.Quality.LOW -> "low"
+                        else -> "unknown"
+                    },
+                    networkRequired = voice.isNetworkConnectionRequired,
+                    isMale = lower.contains("male") && !lower.contains("female")
+                )
+            }.sortedWith(compareBy({ it.locale }, { it.name }))
+        }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Picks the best installed voice for a language.
+     * Bengali preference order: bn-BD male > bn-BD > bn-IN > any Bengali > English.
+     */
+    fun bestVoiceFor(language: String): TtsVoiceInfo? {
+        val voices = availableVoices()
+        if (voices.isEmpty()) return null
+
+        _preferredVoiceName.value?.let { preferred ->
+            voices.firstOrNull { it.name == preferred }?.let { return it }
+        }
+
+        val candidates: List<TtsVoiceInfo> = if (language == "bn") {
+            voices.filter { it.locale.startsWith("bn-BD") } +
+                voices.filter { it.locale.startsWith("bn-IN") } +
+                voices.filter { it.locale.startsWith("bn") }
+        } else {
+            voices.filter { it.locale.startsWith("en-US") } +
+                voices.filter { it.locale.startsWith("en") }
+        }
+
+        return candidates.firstOrNull { it.isMale } ?: candidates.firstOrNull()
+    }
+
+    fun setPreferredVoice(name: String?) {
+        _preferredVoiceName.value = name
+    }
 
     private fun initTts() {
         textToSpeech = TextToSpeech(app) { status ->
@@ -189,6 +253,7 @@ class SpeechManager @Inject constructor(
         if (text.isBlank()) return false
 
         applyLanguageFor(language)
+        applyBestVoice(language)
 
         _isSpeaking.value = true
         val result = tts.speak(
@@ -218,6 +283,22 @@ class SpeechManager @Inject constructor(
         } else {
             applyTtsLanguage(Locale.US)
         }
+    }
+
+    /** Applies the best installed voice (bn-BD male first) for the language. */
+    private fun applyBestVoice(language: String) {
+        val tts = textToSpeech ?: return
+        val info = bestVoiceFor(language) ?: return
+        val voice = runCatching { tts.voices?.firstOrNull { it.name == info.name } }.getOrNull()
+            ?: return
+        runCatching { tts.voice = voice }
+            .onFailure { Log.w(TAG, "Unable to select voice ${info.name}: ${it.message}") }
+    }
+
+    /** Speaks with a specific voice, useful for the voice picker preview. */
+    fun speakWithVoice(text: String, language: String, voiceName: String): Boolean {
+        setPreferredVoice(voiceName)
+        return speak(text, language)
     }
 
     private fun applyTtsLanguage(locale: Locale): Boolean {

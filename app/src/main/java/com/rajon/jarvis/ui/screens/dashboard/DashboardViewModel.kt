@@ -27,13 +27,16 @@ data class DashboardUiState(
     val ramInfo: RamInfo = RamInfo(0, 0, 0),
     val networkInfo: NetworkInfo = NetworkInfo(false, false, false, "Offline"),
     val isAiConfigured: Boolean = false,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    val aiChain: List<String> = emptyList(),
+    val aiChainText: String = "No provider"
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val deviceController: DeviceController,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val providerStore: com.rajon.jarvis.ai.provider.ProviderStore
 ) : ViewModel() {
 
     private val _isRefreshing = MutableStateFlow(false)
@@ -43,6 +46,7 @@ class DashboardViewModel @Inject constructor(
     private val _storageInfo = MutableStateFlow(deviceController.getStorageInfo())
     private val _ramInfo = MutableStateFlow(deviceController.getRamInfo())
     private val _networkInfo = MutableStateFlow(deviceController.getNetworkInfo())
+    private val _aiChain = MutableStateFlow<List<String>>(emptyList())
 
     val uiState: StateFlow<DashboardUiState> = combine(
         combine(
@@ -54,8 +58,9 @@ class DashboardViewModel @Inject constructor(
         },
         combine(_deviceInfo, _storageInfo) { device, storage -> device to storage },
         combine(_ramInfo, _networkInfo) { ram, network -> ram to network },
-        _isRefreshing
-    ) { (owner, language, apiKey), (device, storage), (ram, network), refreshing ->
+        _isRefreshing,
+        _aiChain
+    ) { (owner, language, apiKey), (device, storage), (ram, network), refreshing, chain ->
         DashboardUiState(
             ownerName = owner,
             greeting = computeGreeting(owner, language),
@@ -63,8 +68,10 @@ class DashboardViewModel @Inject constructor(
             storageInfo = storage,
             ramInfo = ram,
             networkInfo = network,
-            isAiConfigured = apiKey.isNotBlank(),
-            isRefreshing = refreshing
+            isAiConfigured = apiKey.isNotBlank() || chain.isNotEmpty(),
+            isRefreshing = refreshing,
+            aiChain = chain,
+            aiChainText = if (chain.isEmpty()) "No provider" else chain.joinToString(" > ")
         )
     }.stateIn(
         scope = viewModelScope,
@@ -74,6 +81,14 @@ class DashboardViewModel @Inject constructor(
 
     init {
         refresh()
+        viewModelScope.launch {
+            providerStore.configs.collect { configs ->
+                _aiChain.value = configs
+                    .filter { it.enabled && it.isConfigured }
+                    .sortedBy { it.priority }
+                    .map { it.displayName.substringBefore(" (") }
+            }
+        }
     }
 
     fun refresh() {

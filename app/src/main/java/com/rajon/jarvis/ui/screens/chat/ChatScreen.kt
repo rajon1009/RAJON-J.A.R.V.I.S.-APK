@@ -77,6 +77,8 @@ fun ChatScreen(
     val isThinking by viewModel.isThinking.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val providerLabel by viewModel.providerLabel.collectAsStateWithLifecycle()
+    val failoverNotice by viewModel.failoverNotice.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -113,6 +115,13 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(failoverNotice) {
+        failoverNotice?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissFailoverNotice()
+        }
+    }
+
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size, isThinking) {
@@ -141,7 +150,15 @@ fun ChatScreen(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = if (isListening) "Listening..." else if (isThinking) "Processing..." else "Neural Core Online",
+                                text = if (isListening) {
+                                    "Listening..."
+                                } else if (isThinking) {
+                                    "Processing..."
+                                } else if (providerLabel != null) {
+                                    "Neural Core Online - $providerLabel"
+                                } else {
+                                    "Neural Core Online"
+                                },
                                 fontSize = 11.sp,
                                 color = if (isListening) JarvisCyan else Color.LightGray
                             )

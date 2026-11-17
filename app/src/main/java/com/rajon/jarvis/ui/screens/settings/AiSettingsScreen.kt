@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -33,6 +35,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,6 +58,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.rajon.jarvis.ai.provider.ProviderConfig
+import com.rajon.jarvis.ai.provider.ProviderType
 import com.rajon.jarvis.ui.components.BottomNavBar
 import com.rajon.jarvis.ui.components.GlassPanel
 import com.rajon.jarvis.ui.components.GlowingText
@@ -61,6 +67,7 @@ import com.rajon.jarvis.ui.components.HudSectionTitle
 import com.rajon.jarvis.navigation.Screen
 import com.rajon.jarvis.ui.theme.JarvisCyan
 import com.rajon.jarvis.ui.theme.JarvisDarkBackground
+import com.rajon.jarvis.ui.theme.JarvisDarkOutline
 import com.rajon.jarvis.ui.theme.JarvisDarkSurface
 import com.rajon.jarvis.ui.theme.JarvisError
 import com.rajon.jarvis.ui.theme.JarvisOrange
@@ -76,6 +83,9 @@ fun AiSettingsScreen(
     val isTesting by viewModel.isTesting.collectAsStateWithLifecycle()
     val testResult by viewModel.testResult.collectAsStateWithLifecycle()
     val feedback by viewModel.feedback.collectAsStateWithLifecycle()
+    val providerConfigs by viewModel.providerConfigs.collectAsStateWithLifecycle()
+    val providerStates by viewModel.providerStates.collectAsStateWithLifecycle()
+    val failoverChain by viewModel.failoverChain.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -275,6 +285,49 @@ fun AiSettingsScreen(
                 }
             }
 
+            item { HudSectionTitle(text = "MULTI-AI FAILOVER") }
+
+            item {
+                GlassPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = JarvisCyan.copy(alpha = 0.30f)
+                ) {
+                    Text(
+                        text = "Automatic provider chain",
+                        color = JarvisCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (failoverChain.isEmpty()) {
+                            "No provider is ready yet. Add at least one API key below."
+                        } else {
+                            failoverChain.joinToString("   >   ") { "${it.displayName} (${it.model})" }
+                        },
+                        color = Color.White,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "When a provider returns 429 (quota or rate limit), any 5xx, a timeout or an empty 404, J.A.R.V.I.S. switches to the next provider automatically and keeps the conversation context. Coding and research requests prefer specialist models, short conversation prefers a fast model.",
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            items(providerConfigs.filter { it.id != "gemini" }) { config ->
+                ProviderCard(
+                    config = config,
+                    state = providerStates[config.id],
+                    onSave = { model, key -> viewModel.saveProvider(config.id, model, key) },
+                    onTest = { model, key -> viewModel.testProvider(config.id, model, key) },
+                    onDiscover = { key -> viewModel.discoverModels(config.id, key) },
+                    onToggle = { enabled -> viewModel.setProviderEnabled(config.id, enabled) }
+                )
+            }
+
             item { HudSectionTitle(text = "MODEL & TRANSPORT") }
 
             item {
@@ -331,5 +384,191 @@ private fun InfoLine(label: String, value: String, valueColor: Color) {
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(start = 10.dp)
         )
+    }
+}
+
+@Composable
+private fun ProviderCard(
+    config: ProviderConfig,
+    state: ProviderUiState?,
+    onSave: (String, String) -> Unit,
+    onTest: (String, String) -> Unit,
+    onDiscover: (String) -> Unit,
+    onToggle: (Boolean) -> Unit
+) {
+    var modelInput by remember(config.id, config.model) { mutableStateOf(config.model) }
+    var keyInput by remember(config.id, config.apiKey) { mutableStateOf(config.apiKey) }
+    var keyVisible by remember(config.id) { mutableStateOf(false) }
+
+    val isBusy = state?.isBusy == true
+    val ready = config.apiKey.isNotBlank() && config.model.isNotBlank()
+
+    GlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        borderColor = if (ready) JarvisSuccess.copy(alpha = 0.45f) else JarvisDarkOutline
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = config.displayName,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = when (config.type) {
+                        ProviderType.GEMINI -> "Gemini native REST"
+                        ProviderType.OPENAI_COMPATIBLE -> "OpenAI compatible REST"
+                        ProviderType.ANTHROPIC -> "Anthropic Messages API"
+                    },
+                    color = Color.Gray,
+                    fontSize = 10.sp
+                )
+            }
+            Switch(
+                checked = config.enabled,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = JarvisCyan,
+                    checkedTrackColor = JarvisCyan.copy(alpha = 0.35f),
+                    uncheckedThumbColor = Color.Gray,
+                    uncheckedTrackColor = JarvisDarkOutline
+                )
+            )
+        }
+
+        if (config.notes.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = config.notes, color = Color.Gray, fontSize = 10.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = modelInput,
+            onValueChange = { modelInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Model id (discover it with Models)", color = Color.Gray) },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JarvisCyan,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            ),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        OutlinedTextField(
+            value = keyInput,
+            onValueChange = { keyInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("API key", color = Color.Gray) },
+            singleLine = true,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Key,
+                    contentDescription = null,
+                    tint = JarvisCyan
+                )
+            },
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(
+                        imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = "Toggle key visibility",
+                        tint = Color.Gray
+                    )
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JarvisCyan,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            ),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { onSave(modelInput, keyInput) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = JarvisCyan,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Save", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { onTest(modelInput, keyInput) },
+                enabled = !isBusy,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisCyan),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        color = JarvisCyan,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Test", fontSize = 12.sp)
+                }
+            }
+
+            OutlinedButton(
+                onClick = { onDiscover(keyInput) },
+                enabled = !isBusy,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = JarvisOrange),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(" Models", fontSize = 12.sp)
+            }
+        }
+
+        val currentState = state
+        if (currentState != null && currentState.message != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = currentState.message,
+                color = when (currentState.isSuccess) {
+                    true -> JarvisSuccess
+                    false -> JarvisError
+                    null -> Color.LightGray
+                },
+                fontSize = 11.sp
+            )
+        }
+
+        if (currentState != null && currentState.discoveredModels.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Available models: " + currentState.discoveredModels.take(10).joinToString(", "),
+                color = Color.Gray,
+                fontSize = 10.sp
+            )
+        }
     }
 }

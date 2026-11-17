@@ -76,12 +76,16 @@ class VoiceAssistantViewModel @Inject constructor(
         viewModelScope.launch {
             _isProcessing.value = true
             try {
-                val result = jarvisAi.processUserRequest(text)
+                val result = jarvisAi.processUserRequest(text, fromVoice = true)
                 _reply.value = result.replyText
 
                 val ttsEnabled = preferencesManager.isTtsEnabled.first()
                 if (ttsEnabled && result.replyText.isNotBlank()) {
                     val language = preferencesManager.language.first()
+                    val savedVoice = preferencesManager.ttsVoice.first()
+                    if (savedVoice.isNotBlank()) {
+                        speechManager.setPreferredVoice(savedVoice)
+                    }
                     val spoken = speechManager.speak(result.replyText, language)
                     if (!spoken) {
                         _error.value = "Speech output is unavailable on this device. Read the reply above."
