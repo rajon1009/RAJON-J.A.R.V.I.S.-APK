@@ -435,7 +435,11 @@ class AgoraVoiceAgent @Inject constructor(
     override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
         val text = transcript.text ?: return
         if (text.isBlank()) return
-        val entry = AgoraTranscript(transcript.turnId ?: "", transcript.type?.toString() ?: "", text)
+        val entry = AgoraTranscript(
+            turnId = transcript.turnId?.toString() ?: "",
+            type = transcript.type?.toString() ?: "",
+            text = text
+        )
         _transcripts.value = (_transcripts.value + entry).takeLast(50)
     }
 
