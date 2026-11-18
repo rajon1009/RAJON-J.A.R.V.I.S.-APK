@@ -133,7 +133,7 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:$okhttpVersion")
 
     // Agora Conversational Voice Agent (RTC voice + RTM + official client toolkit)
-    implementation("io.agora.rtc:full-sdk:4.5.1")
+    implementation("io.agora.rtc:voice-sdk:4.5.1")
     implementation("io.agora:agora-rtm:2.2.3")
     implementation("io.agora.agents:agora-agent-client-toolkit:2.9.0")
 
