@@ -78,8 +78,13 @@ android {
     }
 
     packaging {
+        // Agora ships many extension AARs that contain the same .so files.
+        jniLibs {
+            pickFirsts += listOf("**/*.so")
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            pickFirsts += listOf("META-INF/*.kotlin_module")
         }
     }
 }
