@@ -27,7 +27,7 @@ object SpeechPolicy {
 
     /** Appended to every locally-routed provider instruction, including Agora's LLM. */
     const val BANGLADESHI_BENGALI_RESPONSE_INSTRUCTION =
-        "Reply only in natural, standard Bangladeshi Bengali (Bangla). Understand English and mixed Bangla-English commands, but keep the reply in Bangla."
+        "Act and speak with the calm intelligence, polite deference, and sophistication of Marvel's J.A.R.V.I.S., exclusively in natural, elegant Bangladeshi Bengali. Always address Sir respectfully ('স্যার'). Never sound like a robotic machine translation; use natural, charismatic spoken Bengali (e.g. 'অবশ্যই স্যার', 'সব প্রস্তুত আছে স্যার', 'আমি দেখছি স্যার'). Keep voice replies smooth, clean, and spoken-friendly without markdown symbols."
 
     fun normalize(mode: String?): String = when (mode?.lowercase()) {
         EN -> EN
@@ -41,7 +41,7 @@ object SpeechPolicy {
 
     /** True when the text contains Latin script (an English command or word). */
     fun containsLatin(text: String): Boolean =
-        text.any { it.isLetter && !isBengaliChar(it) }
+        text.any { it.isLetter() && !isBengaliChar(it) }
 
     /** Detects which script(s) the user actually used. */
     fun detect(text: String): Detected {

@@ -80,12 +80,15 @@ class VoiceAssistantViewModel @Inject constructor(
             speechManager.startListening(
                 language = locale,
                 fallbackLanguage = fallbackLocale,
+                onPartialResult = { partial ->
+                    _transcript.value = partial
+                },
                 onResult = { text ->
                     _transcript.value = text
                     if (text.isNotBlank()) {
                         submit(text)
                     } else {
-                        _error.value = "কথা বোঝা যায়নি। আবার চেষ্টা করুন।"
+                        _error.value = "কথা বোঝা যায়নি। আবার বলুন।"
                     }
                 },
                 onError = { message ->

@@ -189,8 +189,10 @@ fun VoiceAssistantScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         ArcReactor(
-                            coreSize = 176.dp,
-                            isActive = isListening || isProcessing || isSpeaking
+                            coreSize = 184.dp,
+                            isActive = isListening || isProcessing || isSpeaking,
+                            isListening = isListening,
+                            isSpeaking = isSpeaking
                         )
                         Spacer(modifier = Modifier.height(10.dp))
 

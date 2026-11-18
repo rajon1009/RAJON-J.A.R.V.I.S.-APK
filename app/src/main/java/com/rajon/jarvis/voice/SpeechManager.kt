@@ -141,6 +141,7 @@ class SpeechManager @Inject constructor(
     fun startListening(
         language: String = "bn-BD",
         fallbackLanguage: String? = null,
+        onPartialResult: ((String) -> Unit)? = null,
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -150,19 +151,17 @@ class SpeechManager @Inject constructor(
         }
 
         stopListening()
-        startRecognitionPass(language, fallbackLanguage, allowFallback = true, onResult, onError)
+        startRecognitionPass(language, fallbackLanguage, allowFallback = false, onPartialResult, onResult, onError)
     }
 
     /**
-     * Runs one recognition pass.  Android's standard recognizer accepts one locale per
-     * request, so a failed/low-confidence Bengali pass is retried once in English (and
-     * vice versa). This makes mixed Bangla/English commands practical without claiming
-     * that a vendor-specific multilingual recognizer is available.
+     * Runs one recognition pass with real-time partial results and fast silence detection.
      */
     private fun startRecognitionPass(
         language: String,
         fallbackLanguage: String?,
         allowFallback: Boolean,
+        onPartialResult: ((String) -> Unit)?,
         onResult: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -188,12 +187,12 @@ class SpeechManager @Inject constructor(
                         (error == SpeechRecognizer.ERROR_NO_MATCH ||
                             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
                     ) {
-                        startRecognitionPass(fallbackLanguage, null, false, onResult, onError)
+                        startRecognitionPass(fallbackLanguage, null, false, onPartialResult, onResult, onError)
                         return
                     }
                     val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "কথা বোঝা যায়নি। আবার চেষ্টা করুন।"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শোনা যায়নি। আবার চেষ্টা করুন।"
+                        SpeechRecognizer.ERROR_NO_MATCH -> "কথা বোঝা যায়নি। আবার বলুন।"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শোনা যায়নি। আবার বলুন।"
                         SpeechRecognizer.ERROR_NETWORK -> "কথা শনাক্ত করার সময় নেটওয়ার্ক সমস্যা হয়েছে।"
                         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "কথা শনাক্ত করার সময় শেষ হয়েছে। সংযোগ পরীক্ষা করুন।"
                         SpeechRecognizer.ERROR_AUDIO -> "অডিও রেকর্ডিংয়ে সমস্যা হয়েছে। মাইক্রোফোন পরীক্ষা করুন।"
@@ -209,20 +208,24 @@ class SpeechManager @Inject constructor(
                 override fun onResults(results: Bundle?) {
                     _isListening.value = false
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val scores = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
                     releaseRecognizer()
-                    if (!matches.isNullOrEmpty() &&
-                        !(allowFallback && fallbackLanguage != null && SpeechPolicy.confidenceTooLow(scores))
-                    ) {
+                    if (!matches.isNullOrEmpty() && matches[0].isNotBlank()) {
                         onResult(matches[0])
                     } else if (allowFallback && fallbackLanguage != null) {
-                        startRecognitionPass(fallbackLanguage, null, false, onResult, onError)
+                        startRecognitionPass(fallbackLanguage, null, false, onPartialResult, onResult, onError)
                     } else {
-                        onError("কথা বোঝা যায়নি। আবার চেষ্টা করুন।")
+                        onError("কথা বোঝা যায়নি। আবার বলুন।")
                     }
                 }
 
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text = matches?.firstOrNull()?.trim()
+                    if (!text.isNullOrBlank()) {
+                        onPartialResult?.invoke(text)
+                    }
+                }
+
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
         }
@@ -233,7 +236,10 @@ class SpeechManager @Inject constructor(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language)
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, language)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 700L)
         }
 
         speechRecognizer?.startListening(intent)
@@ -276,6 +282,14 @@ class SpeechManager @Inject constructor(
         }
         if (text.isBlank()) return false
 
+        val cleanSpeechText = text
+            .replace(Regex("""[*#_`~]"""), "")
+            .replace(Regex("""\{.*?\}"""), "")
+            .replace(Regex("""\[(.*?)\]\(.*?\)"""), "$1")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        if (cleanSpeechText.isBlank()) return false
+
         val replyLanguage = SpeechPolicy.replyLanguage(language, SpeechPolicy.Detected.NONE)
         if (!applyLanguageFor(replyLanguage)) {
             Log.w(TAG, "No supported TTS locale for $replyLanguage")
@@ -283,9 +297,13 @@ class SpeechManager @Inject constructor(
         }
         applyBestVoice(replyLanguage)
 
+        // J.A.R.V.I.S. signature calm, sophisticated resonance and pacing
+        tts.setPitch(0.94f)
+        tts.setSpeechRate(0.98f)
+
         _isSpeaking.value = true
         val result = tts.speak(
-            text,
+            cleanSpeechText,
             TextToSpeech.QUEUE_FLUSH,
             null,
             "JARVIS_${System.currentTimeMillis()}"

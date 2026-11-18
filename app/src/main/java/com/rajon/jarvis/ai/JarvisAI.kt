@@ -33,7 +33,8 @@ class JarvisAI @Inject constructor(
     private val memoryRepository: MemoryRepository,
     private val conversationManager: ConversationManager,
     private val geminiClient: GeminiClient,
-    private val aiRouter: AiRouter
+    private val aiRouter: AiRouter,
+    private val localCommandRecognizer: LocalCommandRecognizer
 ) {
     suspend fun processUserRequest(userText: String, fromVoice: Boolean = false): JarvisAiResult {
         conversationManager.recordUserMessage(userText)
@@ -43,6 +44,18 @@ class JarvisAI @Inject constructor(
             preferencesManager.language.first(),
             SpeechPolicy.detect(userText)
         )
+
+        // 1. Instant Local Device Command Check (Instant execution in < 10ms, no network delay)
+        val localMatch = localCommandRecognizer.match(userText, language, owner)
+        if (localMatch != null) {
+            val actionResult = executeJarvisAction(localMatch.action, language)
+            conversationManager.recordAssistantMessage(localMatch.immediateSpokenResponse)
+            return JarvisAiResult(
+                replyText = localMatch.immediateSpokenResponse,
+                executedActionDescription = actionResult,
+                providerLabel = "J.A.R.V.I.S. Local Core"
+            )
+        }
 
         if (aiRouter.activeProviders().isEmpty()) {
             val fallback = if (language == "bn") {
@@ -67,7 +80,7 @@ class JarvisAI @Inject constructor(
         val task: AiTask = AiTaskClassifier.classify(userText, fromVoice)
 
         val outcome = aiRouter.generate(
-            systemInstruction = buildSystemInstruction(owner, language),
+            systemInstruction = buildSystemInstruction(owner, language, fromVoice),
             history = history,
             userText = userText,
             task = task
@@ -136,9 +149,15 @@ class JarvisAI @Inject constructor(
         return geminiClient.testConnection(apiKey)
     }
 
-    private suspend fun buildSystemInstruction(owner: String, language: String): String {
+    private suspend fun buildSystemInstruction(owner: String, language: String, fromVoice: Boolean = false): String {
         val deviceInfo = deviceController.getFullDeviceInfo()
         val memories = memoryRepository.getAllOnce().joinToString("\n") { "- ${it.key}: ${it.value}" }
+
+        val voiceRule = if (fromVoice) {
+            "4. This is a real-time voice query. Keep answers very concise, direct, and quick (1-2 short sentences maximum), because replies are read aloud immediately."
+        } else {
+            "4. Keep spoken answers concise (2-4 sentences) unless Sir asks for detail, because replies are read aloud."
+        }
 
         return """
 You are J.A.R.V.I.S., the ultimate personal Artificial Intelligence assistant created exclusively for your owner and master, $owner Sir.
@@ -146,7 +165,7 @@ Personality & Rules:
 1. Always address the owner respectfully as "$owner Sir" or "Sir".
 2. You speak ${if (language == SpeechPolicy.BN) "natural, standard Bangladeshi Bengali (Bangla)" else "natural English"}. ${if (language == SpeechPolicy.BN) SpeechPolicy.BANGLADESHI_BENGALI_RESPONSE_INSTRUCTION else "An explicit English preference is enabled."}
 3. You are confident, polite, proactive, highly intelligent, and loyal.
-4. Keep spoken answers concise (2-4 sentences) unless Sir asks for detail, because replies are read aloud.
+$voiceRule
 5. If Sir asks you to do an Android device task, you MUST append an executable JSON action block at the end of your response in this exact format:
 ```json
 {"action": "ACTION_NAME", "params": {"key": "value"}}
@@ -198,32 +217,50 @@ ${memories.ifBlank { "- none yet" }}
                 val app = deviceController.searchApp(action.appName)
                 if (app != null) {
                     val ok = deviceController.launchApp(app.packageName)
-                    if (ok) "Opened ${app.appName}." else "Could not launch ${app.appName}."
+                    if (language == SpeechPolicy.BN) {
+                        if (ok) "অবশ্যই স্যার, ${app.appName} চালু করছি।" else "স্যার, ${app.appName} চালু করা যায়নি।"
+                    } else {
+                        if (ok) "Opening ${app.appName}, Sir." else "Could not launch ${app.appName}, Sir."
+                    }
                 } else {
-                    "App '${action.appName}' not found on device."
+                    if (language == SpeechPolicy.BN) "স্যার, ফোনে '${action.appName}' অ্যাপটি পাওয়া যায়নি।"
+                    else "App '${action.appName}' not found on device, Sir."
                 }
             }
             is JarvisAction.OpenWhatsApp -> {
                 if (!action.phone.isNullOrBlank() && !action.message.isNullOrBlank()) {
                     deviceController.sendWhatsAppMessage(action.phone, action.message)
-                    "Drafting WhatsApp message for ${action.phone}. Press send in WhatsApp to confirm."
+                    if (language == SpeechPolicy.BN) "স্যার, ${action.phone} নম্বরে হোয়াটসঅ্যাপ মেসেজ প্রস্তুত করা হয়েছে।"
+                    else "Drafting WhatsApp message for ${action.phone}, Sir."
                 } else {
-                    deviceController.openWhatsApp()
-                    "Opening WhatsApp."
+                    val ok = deviceController.openWhatsApp()
+                    if (language == SpeechPolicy.BN) {
+                        if (ok) "অবশ্যই স্যার, হোয়াটসঅ্যাপ চালু করছি।" else "স্যার, হোয়াটসঅ্যাপ চালু করা যায়নি।"
+                    } else {
+                        if (ok) "Opening WhatsApp, Sir." else "Could not open WhatsApp, Sir."
+                    }
                 }
             }
             is JarvisAction.SearchYouTube -> {
-                deviceController.openYouTubeSearch(action.query)
-                "Searching YouTube for '${action.query}'."
+                val ok = deviceController.openYouTubeSearch(action.query)
+                if (language == SpeechPolicy.BN) {
+                    if (action.query.isNotBlank()) "অবশ্যই স্যার, ইউটিউবে '${action.query}' সার্চ করছি।"
+                    else "অবশ্যই স্যার, ইউটিউব চালু করছি।"
+                } else {
+                    if (action.query.isNotBlank()) "Searching YouTube for '${action.query}', Sir."
+                    else "Opening YouTube, Sir."
+                }
             }
             is JarvisAction.SetReminder -> {
                 val triggerTime = System.currentTimeMillis() + (action.minutesFromNow * 60 * 1000L)
                 reminderManager.scheduleReminder(action.title, "Scheduled by J.A.R.V.I.S.", triggerTime)
-                "Reminder set for '${action.title}' in ${action.minutesFromNow} minutes."
+                if (language == SpeechPolicy.BN) "স্যার, '${action.title}'-এর জন্য ${action.minutesFromNow} মিনিটের রিমাইন্ডার সেট করা হয়েছে।"
+                else "Reminder set for '${action.title}' in ${action.minutesFromNow} minutes, Sir."
             }
             is JarvisAction.OpenSettings -> {
                 deviceController.openSettings(action.section ?: Settings.ACTION_SETTINGS)
-                "Opening settings."
+                if (language == SpeechPolicy.BN) "অবশ্যই স্যার, সেটিংস ওপেন করছি।"
+                else "Opening settings, Sir."
             }
             is JarvisAction.Unknown -> "Action unrecognized: ${action.raw}"
         }

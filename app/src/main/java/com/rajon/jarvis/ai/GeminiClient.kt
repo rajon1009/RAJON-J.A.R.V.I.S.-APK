@@ -76,10 +76,8 @@ class GeminiClient @Inject constructor() {
         // requests succeed. Force HTTP/1.1 so chat requests follow the reliable path.
         .protocols(listOf(Protocol.HTTP_1_1))
         .dns(ipv4FirstDns)
-        // Carrier NAT silently drops idle keep-alive sockets, which makes OkHttp
-        // wait for the full read timeout on a reused connection. A zero-sized pool
-        // matches curl's fresh-connection behaviour.
-        .connectionPool(ConnectionPool(0, 1, TimeUnit.NANOSECONDS))
+        // Keep connections alive for 30s to avoid repeated TLS handshakes during active conversations.
+        .connectionPool(ConnectionPool(5, 30, TimeUnit.SECONDS))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -91,7 +89,8 @@ class GeminiClient @Inject constructor() {
         apiKey: String,
         systemInstruction: String,
         history: List<ChatMessage>,
-        userText: String
+        userText: String,
+        includeThinking: Boolean = false
     ): GeminiOutcome {
         if (apiKey.isBlank()) {
             return GeminiOutcome.Failure("No API key configured. Add your Gemini API key in AI Settings.")
@@ -101,14 +100,14 @@ class GeminiClient @Inject constructor() {
         val initialRequest = Request.Builder()
             .url(url)
             .addHeader("x-goog-api-key", apiKey)
-            .post(buildRequestBody(systemInstruction, history, userText, includeThinking = true).toRequestBody(JSON_MEDIA_TYPE))
+            .post(buildRequestBody(systemInstruction, history, userText, includeThinking = includeThinking).toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         return try {
             var (code, body) = executeWithRetry(initialRequest)
 
             // Older projects may reject the thinking config. Retry once without it.
-            if (code == 400 && body.contains("thinking", ignoreCase = true)) {
+            if (code == 400 && body.contains("thinking", ignoreCase = true) && includeThinking) {
                 val retryRequest = initialRequest.newBuilder()
                     .post(buildRequestBody(systemInstruction, history, userText, includeThinking = false).toRequestBody(JSON_MEDIA_TYPE))
                     .build()
