@@ -132,8 +132,7 @@ dependencies {
     implementation("io.agora:agora-rtm:2.2.3")
     implementation("io.agora.agents:agora-agent-client-toolkit:2.9.0")
 
-    // Google Generative AI (Gemini) SDK
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // Gemini is called through REST (GeminiClient); the frozen 0.9.0 SDK is not used.
 
     // DataStore Preferences
     implementation("androidx.datastore:datastore-preferences:1.1.1")
