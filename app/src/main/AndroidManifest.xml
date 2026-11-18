@@ -130,6 +130,16 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- One-time Agora credential setup (no keys in source or APK) -->
+        <receiver
+            android:name=".agora.AgoraSetupReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.rajon.jarvis.SET_AGORA_CREDENTIALS" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

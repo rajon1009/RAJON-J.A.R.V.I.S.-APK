@@ -62,6 +62,7 @@ import com.rajon.jarvis.ui.components.BottomNavBar
 import com.rajon.jarvis.ui.components.GlowingText
 import com.rajon.jarvis.ui.components.GlassPanel
 import com.rajon.jarvis.ui.components.HudSectionTitle
+import com.rajon.jarvis.ui.components.JarvisHudBackground
 import com.rajon.jarvis.ui.theme.JarvisCyan
 import com.rajon.jarvis.ui.theme.JarvisCyanDark
 import com.rajon.jarvis.ui.theme.JarvisDarkBackground
@@ -171,6 +172,7 @@ fun VoiceAssistantScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = JarvisDarkBackground
     ) { innerPadding ->
+        JarvisHudBackground(isActive = isListening || isSpeaking) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -398,5 +400,6 @@ fun VoiceAssistantScreen(
                 }
             }
         }
+        } // JarvisHudBackground
     }
 }

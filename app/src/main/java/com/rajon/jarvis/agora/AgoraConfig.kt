@@ -38,7 +38,9 @@ data class AgoraConfig(
 ) {
     val isReady: Boolean
         get() = backendUrl.isNotBlank() ||
-            (appId.isNotBlank() && rtcToken.isNotBlank() && channel.isNotBlank())
+            (appId.isNotBlank() &&
+                (rtcToken.isNotBlank() || appCertificate.isNotBlank()) &&
+                channel.isNotBlank())
 
     /** REST auth header for the Conversational AI endpoints. */
     fun restAuthHeader(): String = when {

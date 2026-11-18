@@ -131,7 +131,8 @@ class AgoraVoiceAgent @Inject constructor(
         val channel: String,
         val rtcUid: Int,
         val agentUid: Int,
-        val restAuth: String
+        val restAuth: String,
+        val agentToken: String = ""
     )
 
     private suspend fun resolveConfig(source: AgoraConfig): ResolvedConfig {
@@ -154,15 +155,47 @@ class AgoraVoiceAgent @Inject constructor(
             )
         }
 
+        val channel = source.channel.ifBlank { "jarvis-voice" }
+        val certificate = source.appCertificate
+        val userToken = source.rtcToken.ifBlank {
+            if (certificate.isNotBlank()) buildRtcToken(source.appId, certificate, channel, source.rtcUid) else ""
+        }
+        val agentToken = if (certificate.isNotBlank()) {
+            buildRtcToken(source.appId, certificate, channel, source.agentUid)
+        } else {
+            userToken
+        }
+        val auth = source.restAuthHeader().ifBlank {
+            if (agentToken.isNotBlank()) "agora token=\"$agentToken\"" else ""
+        }
+
         return ResolvedConfig(
             appId = source.appId,
-            token = source.rtcToken,
-            channel = source.channel,
+            token = userToken,
+            channel = channel,
             rtcUid = source.rtcUid,
             agentUid = source.agentUid,
-            restAuth = source.restAuthHeader()
+            restAuth = auth,
+            agentToken = agentToken
         )
     }
+
+    /** Generates a 1-hour publisher RTC token from the App ID and certificate. */
+    private fun buildRtcToken(appId: String, certificate: String, channel: String, uid: Int): String =
+        runCatching {
+            io.agora.media.RtcTokenBuilder2().buildTokenWithUid(
+                appId,
+                certificate,
+                channel,
+                uid,
+                io.agora.media.RtcTokenBuilder2.Role.ROLE_PUBLISHER,
+                3600,
+                3600
+            )
+        }.getOrElse { error ->
+            Log.e(TAG, "Token build failed: ${error.message}")
+            ""
+        }
 
     private fun initRtcAndRtm(resolved: ResolvedConfig) {
         channelName = resolved.channel
@@ -290,7 +323,7 @@ class AgoraVoiceAgent @Inject constructor(
               "name": "${config.agentName}",
               "properties": {
                 "channel": "${resolved.channel}",
-                "token": "${resolved.token}",
+                "token": "${resolved.agentToken.ifBlank { resolved.token }}",
                 "agent_rtc_uid": "${resolved.agentUid}",
                 "remote_rtc_uids": ["${resolved.rtcUid}"],
                 "enable_string_uid": false,

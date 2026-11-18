@@ -57,6 +57,7 @@ import com.rajon.jarvis.ui.components.BottomNavBar
 import com.rajon.jarvis.ui.components.GlowingText
 import com.rajon.jarvis.ui.components.GlassPanel
 import com.rajon.jarvis.ui.components.HudSectionTitle
+import com.rajon.jarvis.ui.components.JarvisHudBackground
 import com.rajon.jarvis.ui.theme.JarvisCyan
 import com.rajon.jarvis.ui.theme.JarvisCyanLight
 import com.rajon.jarvis.ui.theme.JarvisDarkBackground
@@ -119,6 +120,7 @@ fun DashboardScreen(
         },
         containerColor = JarvisDarkBackground
     ) { innerPadding ->
+        JarvisHudBackground(isActive = state.isAiConfigured) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -252,6 +254,7 @@ fun DashboardScreen(
                 )
             }
         }
+        } // JarvisHudBackground
     }
 }
 
