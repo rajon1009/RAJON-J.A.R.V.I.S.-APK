@@ -381,7 +381,7 @@ class PhoneDiagnosticsEngine @Inject constructor(
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val pm = app.getSystemService(android.os.PowerManager::class.java)
-                val headroom = runCatching { pm?.getThermalHeadroom(5, 10) }
+                val headroom = runCatching { pm?.getThermalHeadroom(5) }
                     .getOrNull() ?: Float.NaN
                 when {
                     !headroom.isNaN() && headroom < 0.1f -> listOf(DiagnosticIssue(

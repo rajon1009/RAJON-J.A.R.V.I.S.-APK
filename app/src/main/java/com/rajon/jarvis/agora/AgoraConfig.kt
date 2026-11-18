@@ -17,6 +17,7 @@ import com.rajon.jarvis.voice.SpeechPolicy
 data class AgoraConfig(
     val backendUrl: String = "",
     val appId: String = "",
+    val appCertificate: String = "",
     val rtcToken: String = "",
     val restToken: String = "",
     val customerId: String = "",
